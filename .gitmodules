@@ -1,0 +1,4 @@
+[submodule "zcash"]
+	path = zcash
+	url = https://github.com/zcash/zcash.git
+	ignore = dirty

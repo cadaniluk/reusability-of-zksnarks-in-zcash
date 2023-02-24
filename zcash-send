@@ -1,0 +1,16 @@
+#!/bin/bash
+
+if [ "$6" = "" ]; then echo "$0 <node> <from> <to> <txid> <vout> <amount>"; exit 1; fi
+
+NODE=$1
+FROM=$2
+TO=$3
+TXID=$4
+VOUT=$5
+AMOUNT=$6
+
+TX=$(./zcash-cli $NODE createrawtransaction '[{\"txid\":\"'$TXID'\",\"vout\":'$VOUT'}]' '{\"'$TO'\":'$AMOUNT'}')
+PRIV=$(./zcash-cli $NODE dumpprivkey $FROM)
+
+#./zcashcli $NODE fundrawtransaction $TX
+./zcash-cli $NODE signrawtransaction $TX null '[\"'$PRIV'\"]' ALL

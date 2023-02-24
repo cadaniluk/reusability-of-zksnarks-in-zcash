@@ -1,10 +1,10 @@
 #!/bin/bash
 
-PATH=$PATH:~/Documents/repos/zcash/src/
+PATH=$PATH:zcash/src
 
 NODE=$1
 if [ "$NODE" = "" ]; then echo "Node ID expected." 1>&2; return 1; fi
 
-DATADIR=~/Documents/zcash-tests/node$NODE
+DATADIR=node$NODE
 
 echo ${@:2} | xargs zcash-cli -regtest -datadir=$DATADIR -conf=zcash.conf -rpcport=$((50000 + $NODE))

@@ -1,0 +1,6 @@
+#!/bin/bash
+
+wget https://api.zcha.in/v2/mainnet/transactions/$1 1>&2
+if [ $? -ne 0 ]; then exit 1; fi
+python -c 'import json; f = open("'$1'"); print(json.dumps(json.loads(f.read()), indent=4))'
+rm $1

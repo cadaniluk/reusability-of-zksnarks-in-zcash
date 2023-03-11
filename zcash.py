@@ -12,13 +12,13 @@ except FileNotFoundError:
 
 url = 'https://zec.getblock.io/'
 
-def getblockio_req(data):
+def getblockio_req(*data):
     header = {
         'x-api-key': api_key.strip(),
         'Content-Type': 'application/json'
     }
     try:
-        resp = urlopen(Request(url, json.dumps(data | {'jsonrpc': '2.0'}).encode('utf-8'),
+        resp = urlopen(Request(url, json.dumps([datum | {'jsonrpc': '2.0'} for datum in list(data)]).encode('utf-8'),
             header, method='POST'))
     except HTTPError:
         print('getblock.io API returned error.')
@@ -35,7 +35,15 @@ if len(sys.argv) == 1:
 
 match sys.argv[1]:
     case 'getblock':
-        resp = getblockio_req({'method': 'getblock', 'params': [sys.argv[2], int(sys.argv[3])]})
+        verbosity = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+        if '-' in sys.argv[2]:
+            start,end = list(map(int, sys.argv[2].split('-')))
+            resp = getblockio_req()
+        else:
+            start = int(sys.argv[2])
+            end = start
+
+        resp = getblockio_req(*[{'method': 'getblock', 'params': [str(i), verbosity]} for i in range(start, end + 1)])
     case 'anchor-of':
         # given a block height and an anchor, look for that anchor backwards from the given height
         if len(sys.argv) < 4:

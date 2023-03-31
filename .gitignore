@@ -1,3 +1,9 @@
 logs/*
 node[0-9]*/*
 *.swp
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.pdf

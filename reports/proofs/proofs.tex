@@ -3,11 +3,14 @@
 \usepackage{hyperref}
 \usepackage{graphicx}
 \usepackage{amsmath}
+\usepackage{etoolbox}
+\usepackage{float}
 
 \title{zk-SNARKs in Zcash}
 \date{}
 
 \setlength{\parindent}{0pt}
+\AtBeginEnvironment{quote}{\par\singlespacing\small}
 
 \begin{document}
 
@@ -39,20 +42,34 @@ Unless cited appropriately, information on Zcash used in this document comes fro
 
 Zerocash \cite{bensasson:zerocash} is a theoretical cryptocurrency, on which the Sprout network update is based.
 Its inner workings are formally described in Figure \ref{fig:zerocash}.
+Unless indicated otherwise, all information in this section on Zerocash is drawn from \cite{bensasson:zerocash}.
 
 The creation of zk-SNARKs is done in \textbf{Pour} operations:
 old coin commitments are ``poured'' into new ones, so the spender must prove ownership of the old coin commitments.
 
-As shown in Figure \ref{fig:zerocash}, primary and auxiliary inputs $\vec{x}$ and $\vec{a}$ to the zk-SNARK are as follows:
+Primary and auxiliary inputs to the zk-SNARK are defined in Figure \ref{fig:zerocash-inputs}
 
-\begin{align*}
-        \vec{x} &:= (\text{rt}, \text{sn}_1^\text{old}, \text{sn}_2^\text{old}, \text{cm}_1^\text{new}, \text{cm}_2^\text{new}, v_\text{pub}, h_\text{Sig}, h_1, h_2) \\
-        \vec{a} &:= (\text{path}_1, \text{path}_2, \text{c}_1^\text{old}, \text{c}_2^\text{old}, \text{addr}_{\text{sk},1}^\text{old}, \text{addr}_{\text{sk},2}^\text{old}, \text{c}_1^\text{new}, \text{c}_2^\text{new})
-\end{align*}
+\begin{figure}[H]
+\centering
+\includegraphics[width=.7\textwidth]{zerocash-inputs.png}
+\caption{The inputs to the zk-SNARK in a POUR transaction (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-inputs}
+\centering
+\end{figure}
+
+The statement proved by the zk-SNARK is defined in Figure \ref{fig:zerocash-pour}:
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=.7\textwidth]{zerocash-pour.png}
+\caption{The statement proved by a zk-SNARK in POUR transactions (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-pour}
+\centering
+\end{figure}
+
+
 
 \begin{figure}[t]
 \includegraphics[width=\textwidth]{zerocash-zksnark.png}
-\caption{The various operations performed in Zerocash. \cite{bensasson:zerocash}} \label{fig:zerocash}
+\caption{The various operations performed in Zerocash. (Section IV.C \cite{bensasson:zerocash}.)} \label{fig:zerocash}
 \centering
 \end{figure}
 
@@ -66,7 +83,7 @@ However, depending on the following conditions, it might only be necessary to mo
         \item \textit{$\text{c}_1^\text{old}$ and $\text{c}_2^\text{old}$ were in a block that is in the active blockchain.}
                 There must have been a preceding block % TODO: blocks build chain, if preceding transaction also stale then recursive repeat, otherwise adapt this block. depeexnding on whther all blocks in chain belong to one user
  % todo: need to look at high-level like this and at zk-snark level internally in the circuit.
-\ende{enumerate}
+\end{enumerate}
 
 \section{Sprout}
 
@@ -99,6 +116,6 @@ Sapling uses zk-SNARKs from \cite{groth:zksnark}. They are implemented using a R
 Orchard uses zk-SNARKs from \cite{zcash:halo2}.
 
 \bibliographystyle{plain}
-\bibliography{proofs}
+\bibliography{../bib}
 
 \end{document}

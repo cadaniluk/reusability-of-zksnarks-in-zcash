@@ -100,7 +100,7 @@ Hence, nodes do not do this on public data directly included in the blockchain a
 
 % TODO: is halo2 a zk-snark?
 The various properties of zk-SNARKs render them useful in Zcash: they are zero-knowledge, meaning that they prove statements on auxiliary inputs without revealing them.
-Their succinctness makes for proofs of constant size.
+Their succinctness makes for proofs of small size.
 Since they are non-interactive, unlike proposed by, for example, the foundational paper of zero-knowledge proofs \cite{goldwasser:zk}, they can be included in the blockchain without further communication between sender and other parties.
 Finally, they are arguments, meaning that a malicious, computationally bounded sender cannot fake proofs to mislead nodes in the network.
 More specifically, they are arguments of knowledge, which means that not only do auxiliary inputs exist that satisfy the proven statement, but also that the prover knows them.
@@ -115,17 +115,55 @@ This internship will investigate under what circumstances and to what degree the
 \section{Current Work}
 
 Zcash has gone through several network updates (Sprout, Sapling, and Orchard are the most relevant ones) and is based on a theoretic cryptocurrency called Zerocash.
+
 The Zcash protocol \cite{hopwood:zcash} and the Zerocash paper \cite{bensasson:zerocash} are studied intensively to understand the basic principles on one hand and get a good understanding of the real protocol on the other.
+
+During the first few weeks, Zerocash was looked at primarily.
+It extends a base currency providing transparent transactions such as Bitcoin by two operations for shielded ones, \textit{Mint} and \textit{Pour}.
+The former serves to ``mint'' shielded coins from transparent ones in order to bring shielded money into circulation, essentially a transaction with transparent inputs and shielded outputs.
+The latter ``pours'' shielded coins into new ones, which is a transaction with shielded inputs and shielded outputs.
+Omitting some details, the acquired understanding of these operations will be explained now.
+
+To perform a fully shielded transaction, a user must first obtain shielded money.
+For that, he issues a \textit{Mint} transactions: given a transparent input that provably belongs to him, he commits to the input's amount of money $v$, the minted money's serial ID $\rho$, and the destination address $a_{pk}$ using a commitment scheme \texttt{COMM}.
+Nobody learns $a_{pk}$ because of $\texttt{COMM}$'s hiding property.
+The user cannot change any of the data commmited to without changing the commitment itself because of $\texttt{COMM}$'s binding property.
+Finally, the commitment is put into the blockchain.
+
+Now, the user can perform a fully shielded transaction.
+Given two commitments $c_1$ and $c_2$ to shielded money, he creates a \textit{Pour} operation, which contains two output commitments $d_1$ and $d_2$, a zk-SNARK $\pi$ and, for each of $c_1$ and $c_2$, a value $\hat\rho$.
+$\pi$ proves that
+
+\begin{itemize}
+        \item $c_1$ and $c_2$ exist on the blockchain
+        \item for each of $c_1$ and $c_2$, $a_{pk}$ belongs to the user; it is a public key derived from a secret key $a_{sk}$, which the user proves to know
+        \item for each of $c_1$ and $c_2$, the revealed value $\hat\rho$ is the same as $f(\rho, a_{sk})$ where $f$ is a pseudo-random function
+        \item $c_1$, $c_2$, $d_1$, and $d_2$ are commitments to shielded money as described above
+        \item $c_1$ and $c_2$ add up to the same amount as $d_1$ and $d_2$; no money is lost
+\end{itemize}
+
+Some data that is put onto the blockchain as part of a \textit{Pour} operation is encrypted with an asymmetric encryption scheme.
+Only the owner of $d_1$ and $d_2$, respectively, can decrypt these data.
+Additionally, the \textit{Pour} operation is signed with a one-time signature scheme.
+
+Once the \textit{Pour} operation is sent, nodes can verify this proof, but never learn source and destination of the money nor the amount spent.
+Since $\hat\rho = f(\rho, a_{sk})$ is public, every node can verify that $c_1$ and $c_2$ have been spent and thus cannot be double-spent by the user because $\rho$ uniquely identifies a coin.
+
 While Zerocash is conceptually the simplest, it is also the farthest away from reality.
-Similarly, network updates gradually add complexity, but the most recent one has already been active for almost one year \cite{zcash:nu5}, which makes it worth investigating.
+It has never been deployed as a true cryptocurrency.
+Furthermore, more recent versions of Zcash use more complex constructs to instantiate the cryptographic primitives such as commitments and zk-SNARKs.
+For example, while Zerocash uses SHA256 to instantiate \texttt{COMM}, Sapling uses a variation of Pedersen commitments over elliptic curves.
+Similarly, Zcash replaces \textit{Mint} and \textit{Pour} by other, very similar operations that are more complicated, but enable more efficient proofs or provide other advantages.
 
-The Zcash source code is online \cite{zcash:github} and is consulted when testing on a Zcash node or on doubts about Zcash's implementation.
-Most of the time is spent on reading relevant papers.
+The Zcash source code is online \cite{zcash:github} and is consulted when testing on a Zcash node or in case of doubts about Zcash's implementation.
+Most of the time is spent on reading relevant papers, however.
 
+Over time, some code has been written to test out Zcash's functionality.
 Zcash nodes offer an RPC interface, which makes it easy to test commands such as address generation, transaction creation, or transaction transfer.
 To interact with the Zcash network, a Python script was written to interact with a Zcash node via \url{getblock.io}, which provides an API to send RPC commands to a node.
 To locally test more than one Zcash node, scripts were written to start and interact with any number of nodes simultaneously.
 All code and other resources related to this internship can be found at \url{https://gricad-gitlab.univ-grenoble-alpes.fr/danilukc/stage}.
+A \texttt{README.md} file describes which code does what.
 
 \section{Future Work}
 

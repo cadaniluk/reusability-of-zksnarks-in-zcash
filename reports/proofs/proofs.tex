@@ -5,6 +5,7 @@
 \usepackage{amsmath}
 \usepackage{etoolbox}
 \usepackage{float}
+\usepackage[a4paper, total={6in, 8in}]{geometry}
 
 \title{zk-SNARKs in Zcash}
 \date{}
@@ -38,20 +39,21 @@ Their concrete zk-SNARK mechanisms are discussed and the feasability of such mod
 The Zcash protocol \cite{hopwood:zcash} comprehensively describes all network updates and is this work's primary reference for technical information on Zcash.
 Unless cited appropriately, information on Zcash used in this document comes from \cite{hopwood:zcash}.
 
+\pagebreak
+
 \section{Zerocash}
 
 Zerocash \cite{bensasson:zerocash} is a theoretical cryptocurrency, on which the Sprout network update is based.
-Its inner workings are formally described in Figure \ref{fig:zerocash}.
 Unless indicated otherwise, all information in this section on Zerocash is drawn from \cite{bensasson:zerocash}.
 
 The creation of zk-SNARKs is done in \textbf{Pour} operations:
 old coin commitments are ``poured'' into new ones, so the spender must prove ownership of the old coin commitments.
 
-Primary and auxiliary inputs to the zk-SNARK are defined in Figure \ref{fig:zerocash-inputs}
+Primary and auxiliary inputs to the zk-SNARK are defined in Figure \ref{fig:zerocash-inputs}:
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=.7\textwidth]{zerocash-inputs.png}
+\includegraphics[width=.6\textwidth]{zerocash-inputs.png}
 \caption{The inputs to the zk-SNARK in a POUR transaction (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-inputs}
 \centering
 \end{figure}
@@ -60,14 +62,14 @@ The statement proved by the zk-SNARK is defined in Figure \ref{fig:zerocash-pour
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=.7\textwidth]{zerocash-pour.png}
+\includegraphics[width=.6\textwidth]{zerocash-pour.png}
 \caption{The statement proved by a zk-SNARK in POUR transactions (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-pour}
 \centering
 \end{figure}
 
+All operations used in the Zerocash protocol are defined in Figure \ref{fig:zerocash}:
 
-
-\begin{figure}[t]
+\begin{figure}[H]
 \includegraphics[width=\textwidth]{zerocash-zksnark.png}
 \caption{The various operations performed in Zerocash. (Section IV.C \cite{bensasson:zerocash}.)} \label{fig:zerocash}
 \centering

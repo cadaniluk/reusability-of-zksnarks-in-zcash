@@ -49,25 +49,29 @@ Unless indicated otherwise, all information in this section on Zerocash is drawn
 The creation of zk-SNARKs is done in \textbf{Pour} operations:
 old coin commitments are ``poured'' into new ones, so the spender must prove ownership of the old coin commitments.
 
-Primary and auxiliary inputs to the zk-SNARK are defined in Figure \ref{fig:zerocash-inputs}:
+Primary and auxiliary inputs to the zk-SNARK are defined in Figure \ref{fig:zerocash-inputs}.
+
+The statement proved by the zk-SNARK is defined in Figure \ref{fig:zerocash-pour}.
+
+All operations used in the Zerocash protocol are defined in Figure \ref{fig:zerocash}.
+
+The transactions $tx_\text{Mint}$ and $tx_\text{Pour}$ are defined in Figure \ref{fig:zerocash} in step 7 of \text{Mint} and step 10 of \text{Pour}, respectively.
+
+\pagebreak
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=.6\textwidth]{zerocash-inputs.png}
-\caption{The inputs to the zk-SNARK in a POUR transaction (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-inputs}
+\caption{The inputs to the zk-SNARK in a \textit{Pour} transaction (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-inputs}
 \centering
 \end{figure}
-
-The statement proved by the zk-SNARK is defined in Figure \ref{fig:zerocash-pour}:
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=.6\textwidth]{zerocash-pour.png}
-\caption{The statement proved by a zk-SNARK in POUR transactions (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-pour}
+\caption{The statement proved by a zk-SNARK in \textit{Pour} transactions (Section IV.B \cite{bensasson:zerocash}.)} \label{fig:zerocash-pour}
 \centering
 \end{figure}
-
-All operations used in the Zerocash protocol are defined in Figure \ref{fig:zerocash}:
 
 \begin{figure}[H]
 \includegraphics[width=\textwidth]{zerocash-zksnark.png}

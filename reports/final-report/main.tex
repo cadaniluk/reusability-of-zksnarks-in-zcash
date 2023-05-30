@@ -17,6 +17,10 @@
 \usepackage{amssymb}
 \usepackage{graphicx}
 \usepackage{complexity}
+\usepackage{adjustbox}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{siunitx}
 
 % the following package is optional:
 %\usepackage{latexsym} 
@@ -176,6 +180,8 @@ $C(w)$ represents the output of $C$ if wires are assigned the values in $w$.
 ARITH-SAT is \NP-complete (similarly to how 3-SAT is \NP-complete), so $L \leq_p \text{ARITH-SAT}$ and $L$ can be efficiently converted into a more general form $C$.
 
 Let $m$ be the number of wires of $C$, including inputs.
+Let $l+1$ be the number of public inputs and assign wires $0$ through $l$ to them.
+Let $A$ be the set of wire values $a_i$ for each wire $i$ including inputs.
 For $k$ multiplication gates in $C$, choose $r_1, \ldots, r_k$ pairwise distinct in $\mathbb{F}$.
 Set $t(x) = \prod_{i=1}^k(x-r_i)$.
 
@@ -194,14 +200,43 @@ In order to ensure this for all $r_j$, divisibility by $t$ is required.
 % TODO: formal definition of zk-SNARK????
 
 Given $Q$, we can now calculate the proof. Let $G_1, G_2$ be two cyclic groups with generators $g_1, g_2$, respectively.
-Then, the proof $\pi$ for the statement $x \in L$ is $\pi := (g_1^A, g_2^B, g_1^C)$, where
+Sample randomly $\alpha, \beta, \gamma, \tau$. Define a common reference string $\sigma := (g_1^{\sigma_1}, g_2^{\sigma_2})$ as
+
+\begin{adjustbox}{max width=.5\textwidth}
+\parbox{\linewidth}{
+\begin{align*}
+        \sigma_1 &:= \left(\begin{aligned}\left\{\frac{\beta u_i(\tau) + \alpha v_i(\tau) + w_i(\tau)}{\delta}\right\}_{i=l+1}^m =: E_1,\\
+        \left\{\frac{\tau^i t(\tau)}{\delta}\right\}_{i=0}^{n-2} =: E_2, \left\{\tau_i\right\}_{i=0}^{n-1} =: E_3,\\
+        \alpha, \beta, \delta, \left\{\frac{\beta u_i(\tau) + \alpha v_i(\tau) + w_i(\tau)}{\gamma}\right\}_{i=0}^l\end{aligned}\right) \\
+        \sigma_2 &:= \left(\beta, \gamma, \delta, \{\tau^i\}_{i=0}^{n-1}\right)
+\end{align*}}
+\end{adjustbox}
+
+In addition, the evalutions of $(g_1^{u_i(\tau)})_{i=0}^m$, $(g_1^{v_i(\tau)})_{i=0}^m$, and $(g_2^{v_i(\tau)})_{i=0}^m$ can be computed as they are composed of the elements of $E_3$.
+
+The prover now calculates $h \in \mathbb{F}[x]$ as
+
+\begin{align}h(x) := \frac{\sum_{i=0}^m a_iu_i(x) \cdot \sum_{i=0}^m a_iv_i(x) - \sum_{i=0}^{m} a_iw_i(x)}{t(x)} \label{eq:h}\end{align}
+
+Then, the proof $\pi$ for the statement $x \in L$ is $\pi := (g_1^A =: \pi_A, g_2^B =: \pi_B, g_1^C =: \pi_C)$, where
 
 \begin{align}
-        A &= \alpha + \sum_{i=0}^m a_iu_i(x) + r\delta \\
-        B &= \beta + \sum_{i=0}^m a_iv_i(x) + s\delta \\
-        C &= \frac{\sum_{i=l+1}^m a_i(\beta u_i(x) + \alpha v_i(x) + w_i(x)) + h(x)t(x)}{\delta} \\
+        A &= \alpha + \sum_{i=0}^m a_iu_i(\tau) + r\delta \label{eq:A} \\
+        B &= \beta + \sum_{i=0}^m a_iv_i(\tau) + s\delta \label{eq:B} \\
+        C &= \frac{\sum_{i=l+1}^m a_i(\beta u_i(\tau) + \alpha v_i(\tau) + w_i(\tau)) + h(\tau)t(\tau)}{\delta} \label{eq:C} \\
         & + As + Br - rs\delta \nonumber
 \end{align}
+
+The prover can evaluate the elements using $\sigma$ as follows:
+
+\begin{align}
+        g_1^A &= g_1^\alpha \prod_{i=0}^m {(g_1^{u_i(\tau)})}^{a_i} g_1^{r\delta} \label{eq:gA} \\
+        g_1^B &= g_1^\beta \prod_{i=0}^m {(g_1^{v_i(\tau)})}^{a_i} g_1^{s\delta} \label{eq:g1B} \\
+        g_2^B &= g_2^\beta \prod_{i=0}^m {(g_2^{v_i(\tau)})}^{a_i} g_2^{s\delta} \label{eq:g2B} \\
+        g_1^C &= {(g_1^{E_1})}^{\{a_i \in A \mid i > l\}} {(g_1^{E_2})}^H {(g_1^A)}^s {(g_1^B)}^r {g_1}^{-rs\delta} \label{eq:gC} 
+\end{align}
+
+Finally, $\pi$ can be verified using a pairing.
 
 % explain the timeline: (1) send TX to peers -> (2) TX refused -> (3) check what fields need change -> (4) recalculate fields -> (5) resend TX to peers AND (1), (2), and (5) entirely, (3) and (4) are discussed afterwards
 \section{Resending Shielded Transactions}
@@ -212,7 +247,7 @@ Then, the proof $\pi$ for the statement $x \in L$ is $\pi := (g_1^A, g_2^B, g_1^
 \centering
 \end{figure}
 
-We fix the following series of events: a Zcash full node creates and sends a transaction containing a JoinSplit description to its peers.
+We assume the following series of events: a Zcash full node creates and sends a transaction containing a JoinSplit description to its peers.
 At some later point, it learns that the transaction has not been included into the blockchain.
 The node wants to resend the transaction: it checks what fields need to change, recalculates these and finally resends the transaction.
 This process is depicted in Figure \ref{fig:resend-steps}.
@@ -241,13 +276,86 @@ All JoinSplit fields, which include primary inputs, as well as all auxiliary inp
 \centering
 \end{figure}
 
+Once it is clear what fields must change, the sender must recalculate them.
+By examining the circuit of the JoinSplit statement, we can deduce what other wire assignments change in the circuit.
+The circuit is given in Figure \ref{fig:joinsplit-circuit}.
+It is mostly composed of instantiations of the SHA-256 compression function, which is used to prove that a commitment belongs to the 29-layer Merkle tree.
+Hence, if the inputs to that part of the JoinSplit circuit happen to stay the same, then we can possibly gain big performance improvements.
+
+\begin{figure}[t]
+\includegraphics[width=8cm]{images/joinsplit-groth16-circuit.jpeg}
+\caption{The JoinSplit statement implemented in bellman used in Sapling.} \label{fig:joinsplit-circuit}
+\centering
+\end{figure}
+
 \section{Optimizing The zk-SNARK's Recalculation}
 
-what can be doing just knowing the old proof?
+$I_\text{changed}$ be the set of indices of changed coefficients $a_i$.
+Denote the new coefficients by $a'_i$, where $a'_i \neq a_i \iff i \in I_\text{changed}$.
+Given $\pi = (\pi_A, \pi_B, \pi_C)$, find new $\pi' = (\pi_A', \pi_B', \pi_C')$.
 
-apparently not much... what can be done with some more knowledge?
+\begin{algorithm}
+\caption{Calculation of Groth16 as implemented in bellman 0.14.0 used by Zcash v5.5.1.}
+\begin{algorithmic}
+        \Procedure{Prove}{$A$,$B$,$C$}
+                \State $h \gets \Call{ComputeQuotient}{A, B, C, t}$
+                \State $h_\text{exp} \gets {(g_1^{E_2})}^H$
+
+                \State $l_\text{exp} \gets {(g_1^{E_1})}^{\{a_i \in A \mid i > l\}}$
+
+                \State $a_\text{prim-exp} \gets \prod_{i=0}^l {(g_1^{u_i(\tau)})}^{a_i}$
+                \State $a_\text{aux-exp} \gets \prod_{i=l+1}^m {(g_1^{u_i(\tau)})}^{a_i}$
+
+                \State $b_\text{prim1-exp} \gets \prod_{i=0}^l {(g_1^{v_i(\tau)})}^{a_i}$
+                \State $b_\text{aux1-exp} \gets \prod_{i=l+1}^m {(g_1^{v_i(\tau)})}^{a_i}$
+
+                \State $b_\text{prim2-exp} \gets \prod_{i=0}^l {(g_2^{v_i(\tau)})}^{a_i}$
+                \State $b_\text{aux2-exp} \gets \prod_{i=l+1}^m {(g_2^{v_i(\tau)})}^{a_i}$
+
+                % Evaluate A, B, C
+                \State $\pi_A \gets g_1^\alpha \cdot a_\text{prim-exp} \cdot a_\text{aux-exp} \cdot g_1^{r\delta}$
+                \State ${\pi_B}_1 \gets g_1^\beta \cdot b_\text{prim1-exp} \cdot b_\text{aux1-exp} \cdot g_1^{s\delta}$
+                \State ${\pi_B}_2 \gets g_2^\beta \cdot b_\text{prim2-exp} \cdot b_\text{aux2-exp} \cdot g_2^{s\delta}$
+                \State $\pi_C \gets l_\text{exp} \cdot h_\text{exp} \cdot \pi_A^s \cdot {{\pi_B}_1}^r \cdot {g_1}^{-rs\delta}$
+
+                \State \Return $(\pi_A, {\pi_B}_2, \pi_C)$
+        \EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+Focus on multiexponentiations.
+
+First, try to optimize $\pi_A'$ and implicitly $\pi_B'$ as it is entirely symmetric.
+Let $A_\text{old} = \sigma_{i\in I_\text{changed}} a_i u_i(\tau)$ and $A_\text{new} = \sigma_{i\in I_\text{changed}} a_i' u_i(\tau)$.
+Then, we could calculate $\frac{\pi_A\cdot g_1^{A_\text{new}}}{g_1^{A_\text{old}}} = \pi_A'$.
+However, since $\pi_A \neq \pi_A'$, we have $\pi_C \neq \pi_C'$, since $\pi_C'$ involves calculating ${g_1^{A'}}^s$. For that we need knowledge of $s$.
+Similarly for $r$.
+Sampling new $r$ and $s$ prevents replacing coefficients in $\pi_A'$.
+Hence, without knowledge of $r$ and $s$, we cannot apply this method.
+
+Now, consider $\pi_C'$.
+Given knowledge of $r$ and $s$, $b_\text{prim1-exp}$ and $b_\text{aux1-exp}$ could be optimized like $\pi_A'$ and $\pi_B'$.
+
 
 \section{Performance Measurements}
+
+\begin{center}
+\begin{tabular}{ c c }
+        $h_\text{exp} $ & \SI{33}{\second} \\
+        $l_\text{exp}$ & \SI{2}{\second} \\
+        $a_\text{prim-exp}$ & \SI{1}{\milli\second} \\
+        $a_\text{aux-exp}$ & \SI{2}{\second} \\
+        $b_\text{prim1-exp}$ & \SI{1}{\milli\second} \\
+        $b_\text{aux1-exp}$ & \SI{1.4}{\second} \\
+        $b_\text{prim2-exp}$ & \SI{1}{\milli\second} \\
+        $b_\text{aux2-exp}$ & \SI{4.3}{\second}
+\end{tabular}
+\end{center}
+
+%        g_1^A &= g_1^\alpha \prod_{i=0}^m {(g_1^{u_i(\tau)})}^{a_i} g_1^{r\delta} \label{eq:gA} \\
+%        g_1^B &= g_1^\beta \prod_{i=0}^m {(g_1^{v_i(\tau)})}^{a_i} g_1^{s\delta} \label{eq:g1B} \\
+%        g_2^B &= g_2^\beta \prod_{i=0}^m {(g_2^{v_i(\tau)})}^{a_i} g_2^{s\delta} \label{eq:g2B} \\
+%        g_1^C &= {(g_1^{E_1})}^{\{a_i \in A \mid i > l\}} {(g_1^{E_2})}^H {(g_1^A)}^s {(g_1^B)}^r {g_1}^{-rs\delta} \label{eq:gC} 
 
 \section{Conclusion}
 

@@ -1,3 +1,6 @@
+% \boldsymbol{n}_1^\text{old},\boldsymbol{n}_2^\text{old}
+% a^\text{old}_\text{sk,$1$},a^\text{old}_\text{sk,$2$}
+
 
 \typeout{IJCAI-11 Instructions for Authors}
 
@@ -143,11 +146,11 @@ The report finishes with a conclusion of the work done and suggestions for futur
 %- NOTE: some steps could partially be implemented externally, but we will assume that everything is done locally.
 
 % explain TX and JoinSplit descriptions
-\section{Transactions in Sprout}
+\section{JoinSplit Descriptions} \label{sec:joinsplit}
 
-Transactions in Sprout consist of transparent inputs and outputs, as well as JoinSplit descriptions.
-
-\subsection{JoinSplit Descriptions}
+In general, transactions in Sprout consist of several fields such as version information or a signature, as well as JoinSplit descriptions (in the following also abbreviated as JoinSplit).
+Only the latter are relevant to this paper, so we will not detail any further the other parts.
+For a full listing and detailed explanation of transaction elements, see \cite{hopwood:zcash}.
 
 \begin{figure}[t]
 \includegraphics[width=8cm]{images/joinsplit.png}
@@ -155,47 +158,70 @@ Transactions in Sprout consist of transparent inputs and outputs, as well as Joi
 \centering
 \end{figure}
 
-\begin{figure}[t]
-\includegraphics[width=8.5cm]{images/proofconditions.png}
-\caption{Conditions validated by the proof.} \label{fig:joinsplit}
-\centering
-\end{figure}
+In Figure \ref{fig:joinsplit}, all the fields of a JoinSplit are given.
+Most prominently, it contains a zk-SNARK $\pi_\text{ZKJoinSplit}$ that proves a statement about the JoinSplit's validity such that others can verify it quickly and are convinced that the JoinSplit is indeed valid.
+
+$\pi_\text{ZKJoinSplit}$ enforces rules such as
+
+\[v_\text{pub}^\text{old} + v_1^\text{old} + v_2^\text{old} = v_\text{pub}^\text{new} + v_1^\text{new} + v_2^\text{new}\]
+
+or that, for $i \in \{1,2\}$, if $\text{enforceMerklePath}_i = 1$, then $\text{path}_i$ is a valid Merkle path from the commitment corresponding to $\boldsymbol{n}_i^\text{old}$ at index $\text{pos}_i$ (enumerated from left to right in the leaves) to the root $\text{rt}^\text{Sprout}$.
+Other rules are enforced, such as whether $a^\text{old}_{\text{sk},i}$ fits $a_{\text{pk},i}$ to prove the spender's possession of the shielded note. However, detailed knowledge of the rules is not relevant for the remainder and can be acquired from \cite{hopwood:zcash}.
+
+$\pi_\text{ZKJoinSplit}$ is created using the Groth16 \cite{groth:zksnark} proving system, so the next section will explain informally how proof creation works.
+For a rigorous treatment, see the original paper.
 
 \subsection{The Groth16 zk-SNARK}
 
 The Groth16 proving system provides a way to prove statements of the form $x \in L$ where $L \in \NP$.
-For Zcash, $x$ would be chosen parts of a JoinSplit and $L$ is the statement ``$x$ is a valid JoinSplit''.
-In this section, we will show informally how a zk-SNARK is produced from such a statement $x \in L$.
+For Zcash, $x$ would be the public parts of a JoinSplit marked with a star in Figure \ref{fig:joinsplit} and $L$ is the statement ``$x$ is a valid JoinSplit according to the rules mentioned in Section \ref{sec:joinsplit}''.
+In this section, we will show informally how a zk-SNARK is produced from such a statement $x \in L$ by reducing $L$ to another problem ARITH-SAT and then encoding ARITH-SAT as a so-called QAP for the creation of $\pi_\text{ZKJoinSplit}$.
 
-Fix a language $L \subseteq \NP$.
-Then, there exists an algorithm $A(x, w)$ polynomial in $|x|$ such that
+$L \in \NP$, so there exists an algorithm $A(x, w)$ polynomial in $|x|$ such that
 
-\begin{align*} L = \{ x \mid \exists w\colon A(x, w) = 0\} \end{align*}
+\begin{align*} L = \{ x \in \{0,1\}^\ast \colon \exists w \in \{0,1\}^\ast\colon A(x, w) = 0\} \end{align*}
 
+For Zcash, $w$ corresponds to the secret inputs to $\pi_\text{ZKJoinSplit}$ in Figure \ref{fig:proof-change}.
+Now, let $\mathbb{F}$ be a field.
+For an arithmetic circuit\footnote{For an illustrative image of an arithmetic circuit, see \cite{gennaro:qap} Figure 1.} $C$, let $m + 1$ be the number of wires of $C$, including inputs.
+Let $l$ be the number of public inputs and w.l.o.g. assign wires $1$ through $l$ to them.
+For practical purposes, wire $0$ is assumed to carry the value $1$.
 Now, define ARITH-SAT to be the following language:
 
-\begin{align*} \text{ARITH-SAT} := \{ \text{An arithmetic circuit } C \mid \exists w\colon C(w) = 0\} \end{align*}
-
-$C(w)$ represents the output of $C$ if wires are assigned the values in $w$.
-ARITH-SAT is \NP-complete (similarly to how 3-SAT is \NP-complete), so $L \leq_p \text{ARITH-SAT}$ and $L$ can be efficiently converted into a more general form $C$.
-
-Let $m$ be the number of wires of $C$, including inputs.
-Let $l+1$ be the number of public inputs and assign wires $0$ through $l$ to them.
-Let $A$ be the set of wire values $a_i$ for each wire $i$ including inputs.
-For $k$ multiplication gates in $C$, choose $r_1, \ldots, r_k$ pairwise distinct in $\mathbb{F}$.
-Set $t(x) = \prod_{i=1}^k(x-r_i)$.
-
-
-Next, define a quadratic arithmetic program (QAP) $Q := (\{u_i \in \mathbb{F}[x] \mid i \in [m]\}, \{v_i \in \mathbb{F}[x] \mid i \in [m]\}, \{w_i \in \mathbb{F}[x] \mid i \in [m]\}, t)$ that computes an arithmetic circuit $C$ if
-
 \begin{align*}
-        t(x) \mid \sum_{i=0}^m a_iu_i(x) \cdot \sum_{i=0}^m a_iv_i(x) - \sum_{i=0}^{m} a_iw_i(x)
+        \text{ARITH-SAT} := \left\{\begin{aligned}\text{An arithmetic circuit } C \text{ and } x \in \mathbb{F}^l \colon \\
+        \exists w \in \mathbb{F}^{m-l-1}\colon C(x,w) = 0\end{aligned}\right\}
 \end{align*}
 
-Intuitively, $L(r_j) := \sum_{i=0}^m a_iu_i(r_j)$ corresponds to the left input of the multiplication gate associated with $r_j$,
-$R(r_j) := \sum_{i=0}^m a_iv_i(r_j)$ is its right input and $O(r_j) := \sum_{i=0}^{m} a_iw_i(x)$ its output.
-If $L(r_j)R(r_j) - O(r_j) = 0$, then the wires have been assigned values that correspond to the circuit structure.
-In order to ensure this for all $r_j$, divisibility by $t$ is required.
+$C(x,w)$ represents the output of $C$ if wires are assigned the values in $x$ and $w$.
+$x$ is called the ``primary input'', $w$ the ``auxiliary input'' or ``witness'.
+ARITH-SAT is \NP-complete (similarly to how 3-SAT is \NP-complete), so $L \leq_p \text{ARITH-SAT}$ and $x \in L$ can be efficiently converted into a form $x_C \in C$.
+
+Let $A$ be the set of all wire values, which includes inputs and wire $0$ and denote the value of wire $i$ by $a_i$.
+For $k$ multiplication gates in $C$, choose $r_1, \ldots, r_k$ pairwise distinct in $\mathbb{F}$.
+
+Next, define a quadratic arithmetic program (QAP) $Q$ as
+
+\begin{align*}
+        Q := \left(\begin{aligned}\{u_i \in \mathbb{F}[x] \colon i \in [m]\}, \{v_i \in \mathbb{F}[x] \colon i \in [m]\},\\
+        \{w_i \in \mathbb{F}[x] \colon i \in [m]\}, t\end{aligned}\right)
+\end{align*}
+
+Set $t(x) := \prod_{i=1}^k(x-r_i)$.
+$Q$ computes an arithmetic circuit $C$ if $x_C = (C,x) \in \text{ARITH-SAT} \iff \text{there exist } a_i$ such that
+
+\begin{align*}
+        t(x) \mid \overbrace{\underbrace{\sum_{i=0}^m a_iu_i(x)}_\text{left input} \cdot \underbrace{\sum_{i=0}^m a_iv_i(x)}_\text{right input} - \underbrace{\sum_{i=0}^{m} a_iw_i(x)}_\text{output}}^\text{$P_Q(x)$}
+\end{align*}
+
+The idea is that $P_Q(r_i) = 0$ corresponds to the statement ``left input times right input minus output equals zero'' for the $i^\text{th}$ multiplication gate.
+Note that the inputs and output are actually not only mere wire values $a_i$, but linear combinations of many wire values.
+Practically, this means that every multiplication gate can subsume many addition and scalar multiplication gates (i.e., linear operations).
+The coefficients of these linear combinations are hardcoded into $Q$'s polynomials using Lagrange interpolation, for example.
+
+Every multiplication gate is satisfied if and only if $r_1,\ldots,r_k$ are zeros of $P_Q$.
+This is given by divisibility by $t$.
+For full details on QAPs, see \cite{gennaro:qap}.
 
 % TODO: formal definition of zk-SNARK????
 
@@ -233,7 +259,7 @@ The prover can evaluate the elements using $\sigma$ as follows:
         g_1^A &= g_1^\alpha \prod_{i=0}^m {(g_1^{u_i(\tau)})}^{a_i} g_1^{r\delta} \label{eq:gA} \\
         g_1^B &= g_1^\beta \prod_{i=0}^m {(g_1^{v_i(\tau)})}^{a_i} g_1^{s\delta} \label{eq:g1B} \\
         g_2^B &= g_2^\beta \prod_{i=0}^m {(g_2^{v_i(\tau)})}^{a_i} g_2^{s\delta} \label{eq:g2B} \\
-        g_1^C &= {(g_1^{E_1})}^{\{a_i \in A \mid i > l\}} {(g_1^{E_2})}^H {(g_1^A)}^s {(g_1^B)}^r {g_1}^{-rs\delta} \label{eq:gC} 
+        g_1^C &= {(g_1^{E_1})}^{\{a_i \in A \colon i > l\}} {(g_1^{E_2})}^H {(g_1^A)}^s {(g_1^B)}^r {g_1}^{-rs\delta} \label{eq:gC} 
 \end{align}
 
 Finally, $\pi$ can be verified using a pairing.
@@ -301,7 +327,7 @@ Given $\pi = (\pi_A, \pi_B, \pi_C)$, find new $\pi' = (\pi_A', \pi_B', \pi_C')$.
                 \State $h \gets \Call{ComputeQuotient}{A, B, C, t}$
                 \State $h_\text{exp} \gets {(g_1^{E_2})}^H$
 
-                \State $l_\text{exp} \gets {(g_1^{E_1})}^{\{a_i \in A \mid i > l\}}$
+                \State $l_\text{exp} \gets {(g_1^{E_1})}^{\{a_i \in A \colon i > l\}}$
 
                 \State $a_\text{prim-exp} \gets \prod_{i=0}^l {(g_1^{u_i(\tau)})}^{a_i}$
                 \State $a_\text{aux-exp} \gets \prod_{i=l+1}^m {(g_1^{u_i(\tau)})}^{a_i}$
@@ -355,7 +381,7 @@ Given knowledge of $r$ and $s$, $b_\text{prim1-exp}$ and $b_\text{aux1-exp}$ cou
 %        g_1^A &= g_1^\alpha \prod_{i=0}^m {(g_1^{u_i(\tau)})}^{a_i} g_1^{r\delta} \label{eq:gA} \\
 %        g_1^B &= g_1^\beta \prod_{i=0}^m {(g_1^{v_i(\tau)})}^{a_i} g_1^{s\delta} \label{eq:g1B} \\
 %        g_2^B &= g_2^\beta \prod_{i=0}^m {(g_2^{v_i(\tau)})}^{a_i} g_2^{s\delta} \label{eq:g2B} \\
-%        g_1^C &= {(g_1^{E_1})}^{\{a_i \in A \mid i > l\}} {(g_1^{E_2})}^H {(g_1^A)}^s {(g_1^B)}^r {g_1}^{-rs\delta} \label{eq:gC} 
+%        g_1^C &= {(g_1^{E_1})}^{\{a_i \in A \colon i > l\}} {(g_1^{E_2})}^H {(g_1^A)}^s {(g_1^B)}^r {g_1}^{-rs\delta} \label{eq:gC} 
 
 \section{Conclusion}
 

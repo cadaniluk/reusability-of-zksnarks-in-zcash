@@ -161,7 +161,7 @@ $\pi_\text{ZKJoinSplit}$ enforces rules such as
 
 \[v_\text{pub}^\text{old} + v_1^\text{old} + v_2^\text{old} = v_\text{pub}^\text{new} + v_1^\text{new} + v_2^\text{new}\]
 
-or the aforementioned membership of commitments in the commitment tree: for $i \in \{1,2\}$, if $\text{enforceMerklePath}_i = 1$, then $\text{path}_i$ is a valid Merkle path from the commitment corresponding to $\boldsymbol{n}_i^\text{old}$ at index $\text{pos}_i$ (enumerated from left to right in the leaves) to the root $\text{rt}^\text{Sprout}$.
+or the aforementioned membership of commitments in the commitment tree: for $i \in \{1,2\}$, if $\text{enforceMerklePath}_i = 1$, then $\text{path}_i$ is a valid Merkle path from the commitment corresponding to $\boldsymbol{n}_i^\text{old}$ at index $\text{pos}_i$ to the root $\text{rt}^\text{Sprout}$.
 Other rules are enforced, such as whether $a^\text{old}_{\text{sk},i}$ fits $a_{\text{pk},i}$ to prove the spender's possession of the shielded note. However, detailed knowledge of the rules is not relevant for the remainder and can be acquired from \cite{hopwood:zcash}.
 
 $\pi_\text{ZKJoinSplit}$ is created using the Groth16 \cite{groth:zksnark} proving system, so the next section will explain informally how proof creation works.
@@ -206,19 +206,19 @@ For a rigorous treatment, see the original paper.
         \hline
         \textbf{Name} & \textbf{Description} \\
         \hline
-        \rule{0pt}{4ex} {\small $\varphi$} & \makecell{A value that is drawn from a transparent input and can be used for\\ JoinSplits.} \\
+        \rule{0pt}{4ex} {\small $\varphi$} & \makecell{A randomly sampled value used to verify\\ uniqueness of $\rho_1^\text{new}, \rho_2^\text{new}$.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{old}_i = (a_\text{pk,$i$}^\text{old}, v_i^\text{old}, \rho_i^\text{old}, \text{rcm}_i^\text{old})$\\ A value that is drawn from a shielded note and can be used for\\ a transparent output.} \\
+        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{old}_i = (a_\text{pk,$i$}^\text{old}, v_i^\text{old}, \rho_i^\text{old}, \text{rcm}_i^\text{old})$\\ The content of the shielded notes about to be spent\\ by revealing their associated nullifier. $a_\text{pk,$i$}^\text{old}$ \\ is a public key identifying the owner. $v_i^\text{old}$ is the monetary value\\ contained in the shielded note. $\rho_i^\text{old}$ is a unique identifier\\ to avoid double-spending. $\text{rcm}_i^\text{old}$ is a random\\ commitment trapdoor that is part of the commitment scheme.} \\
         \hline
-        \rule{0pt}{4ex} {\small $a_\text{sk,$1$}^\text{old},a_\text{sk,$2$}^\text{old}$} & \makecell{A root of the Sprout note commitment tree at some \\ blockheight in the past or a root produced by\\ a previous JoinSplit in the same transaction.} \\
+        \rule{0pt}{4ex} {\small $a_\text{sk,$1$}^\text{old},a_\text{sk,$2$}^\text{old}$} & \makecell{Secret keys that match $a_\text{pk,$1$}^\text{old}, a_\text{pk,$2$}^\text{old}$. Amongst\\ others, used to prove ownership of $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{new}_i = (a_\text{pk,$i$}^\text{new}, v_i^\text{new}, \rho_i^\text{new}, \text{rcm}_i^\text{new})$\\ Nullifiers that refer to shielded notes and are made public to prevent\\ double-spending.} \\
+        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{new}_i = (a_\text{pk,$i$}^\text{new}, v_i^\text{new}, \rho_i^\text{new}, \text{rcm}_i^\text{new})$\\ The content of the shielded notes about to be produced. $a_\text{pk,$i$}^\text{new}$ \\ is a public key identifying the receiver. $v_i^\text{new}$ is the monetary value\\ sent to the receiver. $\rho_i^\text{new}$ is a unique identifier\\ to avoid double-spending. $\text{rcm}_i^\text{new}$ is a random\\ commitment trapdoor that is part of the commitment scheme.} \\
         \hline
-        \rule{0pt}{4ex} {\small \makecell{$\text{enforceMerklePath}_1$,\\ $\text{enforceMerklePath}_2$}} & Commitments to new shielded notes. \\
+        \rule{0pt}{4ex} {\small \makecell{$\text{enforceMerklePath}_1$,\\ $\text{enforceMerklePath}_2$}} & \makecell{A bit that indicates if the path in the commitment tree \\ should be verified. Set to $0$ for dummy notes.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\text{path}_1,\text{path}_2$} & A public key relevant to the creation of $C_1^\text{new}, C_2^\text{new}$. \\
+        \rule{0pt}{4ex} {\small $\text{path}_1,\text{path}_2$} & The path of the respective commitment in the commitment tree. \\
         \hline
-        \rule{0pt}{4ex} {\small $\text{pos}_1, \text{pos}_2$} & \makecell{A random value that is used in the creation of $C_1^\text{new}, C_2^\text{new}$ and\\ $h_1, h_2$.} \\
+        \rule{0pt}{4ex} {\small $\text{pos}_1, \text{pos}_2$} & \makecell{The index of the respective commitment in the leaves of \\ the commitment tree. The leaves are enumerated from \\ left to right starting from $0$. Empty leaves have the value $0$.} \\
         \hline
 \end{tabular}}
 \caption{The secret inputs to $\pi_\text{ZKJoinSplit}$. The fields' names are the same ones as in the original \protect\cite{hopwood:zcash}.} \label{fig:secretinputs}
@@ -308,9 +308,9 @@ Then, the proof $\pi$ for the statement $x \in L$ is $\pi := (g_1A =: \pi_A, g_2
 Given the evaluations of $(g_1{u_i(\tau)})_{i=0}^m$, $(g_1{v_i(\tau)})_{i=0}^m$, and $(g_2{v_i(\tau)})_{i=0}^m$, which can be computed as they are composed of the elements of $\boldsymbol\sigma_{1,3}$ and $\boldsymbol\sigma_{2,4}$, the prover can evaluate the elements using $\sigma$ as follows:
 
 \begin{align}
-        g_1A &= g_1\alpha + \sum_{i=0}^m {(g_1{u_i(\tau)})}{a_i} + {g_1{\delta}}s \label{eq:gA} \\
-        g_1B &= g_1\beta + \sum_{i=0}^m {(g_1{v_i(\tau)})}{a_i} + {g_1{\delta}}s \label{eq:g1B} \\
-        g_2B &= g_2\beta + \sum_{i=0}^m {(g_2{v_i(\tau)})}{a_i} + {g_2{\delta}}s \label{eq:g2B} \\
+        g_1A &= g_1\alpha + \sum_{i=0}^m {(g_1{u_i(\tau)})}{a_i} + {(g_1{\delta})}s \label{eq:gA} \\
+        g_1B &= g_1\beta + \sum_{i=0}^m {(g_1{v_i(\tau)})}{a_i} + {(g_1{\delta})}s \label{eq:g1B} \\
+        g_2B &= g_2\beta + \sum_{i=0}^m {(g_2{v_i(\tau)})}{a_i} + {(g_2{\delta})}s \label{eq:g2B} \\
         g_1C &= \boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m + \boldsymbol\sigma_{1,2}\boldsymbol{h} + {(g_1A)}s + {(g_1B)}r \nonumber \\
         &+ {(g_1\delta)}{(-rs)} \label{eq:gC} 
 \end{align}

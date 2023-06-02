@@ -24,7 +24,7 @@
 \usepackage{adjustbox}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-\usepackage{siunitx}
+\usepackage[binary-units=true]{siunitx}
 
 % the following package is optional:
 %\usepackage{latexsym} 
@@ -308,7 +308,7 @@ Then, the proof $\pi$ for the statement $x \in L$ is $\pi := (g_1A =: \pi_A, g_2
 Given the evaluations of $(g_1{u_i(\tau)})_{i=0}^m$, $(g_1{v_i(\tau)})_{i=0}^m$, and $(g_2{v_i(\tau)})_{i=0}^m$, which can be computed as they are composed of the elements of $\boldsymbol\sigma_{1,3}$ and $\boldsymbol\sigma_{2,4}$, the prover can evaluate the elements using $\sigma$ as follows:
 
 \begin{align}
-        g_1A &= g_1\alpha + \sum_{i=0}^m {(g_1{u_i(\tau)})}{a_i} + {(g_1{\delta})}s \label{eq:gA} \\
+        g_1A &= g_1\alpha + \sum_{i=0}^m {(g_1{u_i(\tau)})}{a_i} + {(g_1{\delta})}r \label{eq:gA} \\
         g_1B &= g_1\beta + \sum_{i=0}^m {(g_1{v_i(\tau)})}{a_i} + {(g_1{\delta})}s \label{eq:g1B} \\
         g_2B &= g_2\beta + \sum_{i=0}^m {(g_2{v_i(\tau)})}{a_i} + {(g_2{\delta})}s \label{eq:g2B} \\
         g_1C &= \boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m + \boldsymbol\sigma_{1,2}\boldsymbol{h} + {(g_1A)}s + {(g_1B)}r \nonumber \\

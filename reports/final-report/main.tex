@@ -235,7 +235,7 @@ $L \in \NP$, so there exists an efficient algorithm $A(x, w)$ such that
 
 \begin{align*} L = \{ x \in \{0,1\}^\ast \colon \exists w \in \{0,1\}^\ast\colon A(x, w) = 0\} \end{align*}
 
-For Zcash, $w$ corresponds to the secret inputs to $\pi_\text{ZKJoinSplit}$ in Table \ref{fig:proof-change}.
+For Zcash, $w$ corresponds to the secret inputs to $\pi_\text{ZKJoinSplit}$ in Table \ref{fig:secretinputs}.
 Now, let $\mathbb{F}_q$ be a $q$-order finite field.
 For an arithmetic circuit\footnote{For an illustrative image of an arithmetic circuit, see \cite{gennaro:qap} Figure 1.} $C$, let $m + 1$ be the number of wires of $C$, including inputs.
 Let $l$ be the number of public inputs and w.l.o.g. assign wires $1$ through $l$ to them.
@@ -328,7 +328,7 @@ Finally, $\pi$ is verified by using a pairing, in Zcash the optimal ate pairing\
 We assume the series of events in Figure \ref{fig:resend-steps}: a Zcash full node creates and sends a transaction containing a JoinSplit description to its peers.
 At some later point, it learns that the transaction has not been included into the blockchain.
 The node wants to resend the transaction: it checks what fields need to change, recalculates these and finally resends the transaction.
-It can be repeated until the transaction is in the blockchain.
+This process can be repeated until the transaction is in the blockchain.
 
 We assume that the node is capable of sending and resending to an adequate number of peers, such that failure of the physical network never prevents the transaction's inclusion.
 Hence, we will not deal with the first and the last step of Figure \ref{fig:resend-steps}.
@@ -338,17 +338,17 @@ This can happen for insufficient transaction fees, for example.
 If it is included, but not fully confirmed by a sufficient number of blocks, it has been refused as well.
 This can happen for a chain reorganization.
 Once it is certain that a transaction has been refused, it must be checked what fields of the JoinSplit must change to maximize the chances of inclusion.
-All JoinSplit fields, which include primary inputs, as well as all auxiliary inputs are listed in two tables in Table \ref{fig:joinsplit-change} and \ref{fig:proof-change}.
+All JoinSplit fields, which include public inputs to $\pi_\text{ZKJoinSplit}$, as well as all secret inputs are listed in two tables in Table \ref{fig:joinsplit} and \ref{fig:secretinputs}.
 
 Once it is clear what fields must change, the sender must recalculate them.
 By examining the circuit of the JoinSplit statement, we can deduce what other wire assignments change in the circuit.
 The circuit is given in Figure \ref{fig:joinsplit-circuit}.
-It is mostly composed of instantiations of the SHA-256 compression function, which is used to prove that a commitment belongs to the 29-layer Merkle tree.
+It is mostly composed of instantiations of the SHA-256 compression function, which is used to prove that a commitment belongs to the 29-layer commitment tree.
 Hence, if the inputs to that part of the JoinSplit circuit happen to stay the same, then we can possibly gain big performance improvements.
 
 \begin{figure}[t]
-\includegraphics[width=8cm]{images/joinsplit-groth16-circuit.jpeg}
-\caption{The JoinSplit statement implemented in bellman used in Sapling.} \label{fig:joinsplit-circuit}
+\includegraphics[width=8.5cm]{images/joinsplit-groth16-circuit.jpeg}
+\caption{The JoinSplit statement implemented in bellman used in Sapling. The blocks corresponding to the SHA-256 compression function are framed. There are $2\cdot 29$ of them: 29 is the depth of the commitment tree and times $2$ because there are two input commitments.} \label{fig:joinsplit-circuit}
 \centering
 \end{figure}
 

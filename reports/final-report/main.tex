@@ -157,7 +157,7 @@ To use only one of either, \textit{dummy notes} can be used.
 The most prominent element of a JoinSplit is $\pi_\text{ZKJoinSplit}$ that proves a statement about the JoinSplit's validity such that others can verify that the JoinSplit is indeed valid.
 $\pi_\text{ZKJoinSplit}$ enforces rules such as
 
-\[v_\text{pub}^\text{old} + v_1^\text{old} + v_2^\text{old} = v_\text{pub}^\text{new} + v_1^\text{new} + v_2^\text{new}\]
+\begin{align}v_\text{pub}^\text{old} + v_1^\text{old} + v_2^\text{old} = v_\text{pub}^\text{new} + v_1^\text{new} + v_2^\text{new} \label{eq:balance}\end{align}
 
 or the aforementioned membership of commitments in the commitment tree: for $i \in \{1,2\}$, if $\text{enforceMerklePath}_i = 1$, then $\text{path}_i$ is a valid Merkle path from the commitment corresponding to $\boldsymbol{n}_i^\text{old}$ at index $\text{pos}_i$ to the root $\text{rt}^\text{Sprout}$.
 Other rules are enforced, such as whether $a^\text{old}_{\text{sk},i}$ fits $a_{\text{pk},i}$ to prove the spender's possession of the shielded note. However, detailed knowledge of the rules is not relevant for the remainder and can be acquired from \cite{hopwood:zcash}.
@@ -172,9 +172,9 @@ For a rigorous treatment, see the original paper.
         \hline
         \textbf{Name} & \textbf{Description} \\
         \hline
-        \rule{0pt}{4ex} {\small ${v_\text{pub}^\text{old}}^\ast$} & \makecell{A value that is drawn from a transparent input and can be used for new commitments\\ in JoinSplits.} \\
+        \rule{0pt}{4ex} {\small ${v_\text{pub}^\text{old}}^\ast$} & \makecell{A value that is drawn from a transparent input and can be used for new commitments\\ in JoinSplits. $0$ if $v_\text{pub}^\text{new} \neq 0$.} \\
         \hline
-        \rule{0pt}{4ex} {\small ${v_\text{pub}^\text{new}}^\ast$} & \makecell{A value that is drawn from a shielded note and can be used for\\ a transparent output.} \\
+        \rule{0pt}{4ex} {\small ${v_\text{pub}^\text{new}}^\ast$} & \makecell{A value that is drawn from a shielded note and can be used for\\ a transparent output. $0$ if $v_\text{pub}^\text{old} \neq 0$.} \\
         \hline
         \rule{0pt}{4ex} {\small ${\text{rt}^\text{Sprout}}^\ast$} & \makecell{A root of the commitment tree at some \\ blockheight in the past or a root produced by\\ a previous JoinSplit in the same transaction.} \\
         \hline
@@ -350,17 +350,48 @@ We want to find relationships between the calculations made for $\pi_\text{ZKJoi
 
 \subsection{Finding $I_\text{changed}$}
 
-The circuit that verifies the validity of a JoinSplit is given in Figure \ref{fig:joinsplit-circuit}.
-It is mostly composed of instantiations of the SHA-256 compression function, which is used to prove that a commitment belongs to the 29-layer commitment tree.
-Hence, if the $a_i$ in that part of the JoinSplit circuit happen to stay the same 
+The set $I_\text{changed}$ should be kept as small as possible; for the JoinSplit circuit, $l=9$ and $m=1956949$, so $I_\text{changed}$ should be a small percentage of $m$.
+As we will see in Section \ref{sec:opt}, this allows for the biggest gains in performance since much of the previous proof can be reused.
+Indeed, with reasonable assumptions, the two cases mentioned in the introduction allow $I_\text{changed}$ to be small.
 
-\begin{figure}[t]
-\includegraphics[width=8.5cm]{images/joinsplit-groth16-circuit.jpeg}
-\caption{The JoinSplit statement implemented in bellman used in Sapling. The blocks corresponding to the SHA-256 compression function are framed. There are $2\cdot 29$ of them: 29 is the depth of the commitment tree and times $2$ because there are two input commitments.} \label{fig:joinsplit-circuit}
-\centering
-\end{figure}
+By far the biggest number of wires is involved in the repeated calculation of the SHA-256 compression function to verify the Merkle paths for the input notes as briefly described in Section \ref{sec:joinsplit}.
+Should any input change that this computation depends on such as $\text{path}_1,\text{path}_2$, then all involved wires need to be recalculated and $I_\text{changed}$ becomes huge.
+Otherwise, it will stay small.
 
-\subsection{Optimizing The zk-SNARK's Recalculation}
+First, we consider the case of changing transaction fees sent to a transparent address.
+Anyone sending a transaction pays a small fee to miners in order to incentivize the transaction's inclusion in a block.
+Such fees are paid implicitly by keeping the transaction outputs too low: if the sum of input values to a transaction exceed the sum of output values, then the miner can take ownership of the difference.
+However, if the transaction fee is set too low, the miner might decide to give preference to other transactions with higher fees.
+Hence, the goal is to choose the minimal fee such that the transaction is included, but not too much money is spent on that either and if the transaction is found to be refused by the spender, it must be resent with a higher transaction fee.
+
+Paying transaction fees from a JoinSplit description happens by setting $v_\text{pub}^\text{new}$ to some non-zero value.
+This amount is then available to the transparent outputs of the containing transaction.
+They can spend some of it and the remainder can later be claimed by the miner.
+This last step is out of the control of the JoinSplit description, however, so the fundamental mechanism is to set and change a transaction fee paid from a JoinSplit transaction is the adjustment of $v_\text{pub}^\text{new}$.
+
+Changing $v_\text{pub}^\text{new}$ affects the balance equation (\ref{eq:balance}) in Section \ref{sec:joinsplit}, verified by $\pi_\text{ZKJoinSplit}$.
+Increasing $v_\text{pub}^\text{new}$ necessitates a decrease in either the left-hand side or $v_1^\text{new} + v_2^\text{new}$.
+We have $v_\text{pub}^\text{old} = 0$ (see Table \ref{fig:joinsplit}) and changing $v_1^\text{old} + v_2^\text{old}$ would imply a lot more changes because of the tight link to $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$, so we confine ourselves to changing $v_1^\text{new} + v_2^\text{new}$.
+This assumes that at least one of these is non-zero.
+Assuming in addition that one of $v_1^\text{new}$ and $v_2^\text{new}$ is sufficient, w.l.o.g. we choose $v_1^\text{new}$.
+In addition, $v_1^\text{new}$ is included in $\boldsymbol{n}^\text{new}_1$, so $\text{cm}_1^\text{new}$ must be recalculated.
+
+In total, this makes for a set $I_\text{changed}$ of size
+
+\begin{align*}
+        |I_\text{changed}| = \underbrace{1}_\text{$v_\text{pub}^\text{new}$ in $\mathbb{F}_q$} &+ \underbrace{64}_\text{$v_\text{pub}^\text{new}$ in binary} + \underbrace{64}_\text{$v_1^\text{new}$ in binary} \\
+        &+ \underbrace{51510}_\text{SHA-256 calculation of $\text{cm}_1$}
+\end{align*}
+
+which is only $\approx 2.6\%$ of all wires.
+
+%\begin{figure}[t]
+%\includegraphics[width=8.5cm]{images/joinsplit-groth16-circuit.jpeg}
+%\caption{The JoinSplit statement implemented in bellman used in Sapling. The blocks corresponding to the SHA-256 compression function are framed. There are $2\cdot 29$ of them: 29 is the depth of the commitment tree and times $2$ because there are two input commitments.} \label{fig:joinsplit-circuit}
+%\centering
+%\end{figure}
+
+\subsection{Optimizing The zk-SNARK's Recalculation} \label{sec:opt}
 
 The steps involved in the calculation of any proof as described in Section \ref{sec:groth16} are
 
@@ -384,7 +415,7 @@ The sum $\sum_{i=0}^m {(g_1{u_i(\tau)})}{a_i}$ in (\ref{eq:gA}) is one example o
 Synthesis can be optimized by only recalculating $a'_i$ for $i \in I_\text{changed}$ and copying all other $a_i$.
 
 A similar technique of substitution can be applied to $\pi_A$ and $\pi_B$ as well as $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in $\pi_C$.
-Given $\pi_A$, $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}), we want to remove all $a_i$ with $i \in I_\text{change}$ (or $i \in I_\text{change} \cap \{l+1,\ldots,m\}$ for $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$) and replace them with $a'_i$.
+Given $\pi_A$, $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}), we want to remove all $a_i$ with $i \in I_\text{changed}$ (or $i \in I_\text{changed} \cap \{l+1,\ldots,m\}$ for $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$) and replace them with $a'_i$.
 For $\pi_A'$, this is fulfilled by the calculation
 
 \begin{align*}
@@ -402,12 +433,12 @@ If there exists any $i$ such that $a_i \neq a'_i$, the coefficients of the produ
 Therefore, there is no clear, exploitable relationship between the wire values $a_i$ and $\boldsymbol{h}$, unlike the structure of $\pi_A$, for example, where a changed $a_i$ affects $\pi_A$ in a very predictable way.
 
 For similar reasons, we did not optimize the computation of $h$ either.
-We did not find a relationship between a change in $a_i$ and the results of the FFTs used, and therefore did not 
+We did not find a relationship between a change in $a_i$ and the results of the FFTs used.
+
+\subsection{Practicality Of The Optimizations} \label{sec:benchmarks}
 
 Choosing the encoding of elements in $G_1$ and $G_2$ used for Zcash \cite{hopwood:zcash}, given an integer $1 \leq k < q$, any element $g_1k$ takes 48 bytes and any element $g_2k$ takes 96 bytes.
 $|G_1| = |G_2| = q \approx 2^{255}$, so 32 bytes suffice to represent any value in $\mathbb{F}_q$.
-
-\section{Performance Measurements} \label{sec:benchmarks}
 
 \begin{center}
 \begin{tabular}{ c c }
@@ -415,9 +446,9 @@ $|G_1| = |G_2| = q \approx 2^{255}$, so 32 bytes suffice to represent any value 
         \hline
         $\boldsymbol{\sigma_{1,2}}\boldsymbol{h}$ in (\ref{eq:gC}) & \SI{33}{\second} \\
         $\boldsymbol{\sigma_{1,1}}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}) & \SI{2}{\second} \\
-        $\sigma_{i=0}^m(g_1u_i(\tau))a_i$ in (\ref{eq:gA}) & \SI{2}{\second} \\
-        $\sigma_{i=0}^m(g_1v_i(\tau))a_i$ in (\ref{eq:g1B}) & \SI{1.4}{\second} \\
-        $\sigma_{i=0}^m(g_2v_i(\tau))a_i$ in (\ref{eq:g2B}) & \SI{4.3}{\second}
+        $\sum_{i=0}^m(g_1u_i(\tau))a_i$ in (\ref{eq:gA}) & \SI{2}{\second} \\
+        $\sum_{i=0}^m(g_1v_i(\tau))a_i$ in (\ref{eq:g1B}) & \SI{1.4}{\second} \\
+        $\sum_{i=0}^m(g_2v_i(\tau))a_i$ in (\ref{eq:g2B}) & \SI{4.3}{\second}
 \end{tabular}
 \end{center}
 

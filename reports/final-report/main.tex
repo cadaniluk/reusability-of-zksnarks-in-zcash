@@ -22,8 +22,6 @@
 \usepackage{graphicx}
 \usepackage{complexity}
 \usepackage{adjustbox}
-\usepackage{algorithm}
-\usepackage{algpseudocode}
 \usepackage[binary-units=true]{siunitx}
 
 % the following package is optional:
@@ -90,7 +88,7 @@ There should not be a central trusted party such as a bank, through which passes
 However, without any trusted party, transactions are not checked for validity such as the fact that a spender must really be the owner of the spent money and that a spender cannot spend money twice.
 
 A commonly used solution by cryptocurrencies to enforce these rules and yet others is a public ledger called the blockchain \cite{nakamoto:bitcoin}.
-The public nature of this data structure enables any node in the cryptocurrency's network to verify rules such as ownership of spent money or double spending money.
+The public nature of this data structure enables any node in the cryptocurrency's network to verify rules such as ownership of spent money or double-spending money.
 However, without appropriate measures a public ledger can lead to compromised privacy by revealing information such as the identities of transaction participants.
 In the special case of Bitcoin, a spent amount of money is associated with a destination address, effectively a user's pseudonym.
 A user may employ an arbitrary number of pseudonyms to hide their true identity and additionally use methods similar to money laundering, but even these fail to guarantee anonymity \cite{reid:bitcoin-anon}.
@@ -103,7 +101,7 @@ This lack of inclusion needs additional care, however, since classical Bitcoin n
 To this end, a cryptographic construct called zero-knowledge succinct non-interactive argument of knowledge (zk-SNARK) is used.
 A zk-SNARK has public and secret inputs.
 The former are publicly known, the latter are only known to the sender.
-The sender adds all sensitive information as the secret input and some other as the primary input, creates a zk-SNARK from these, and adds it to a shielded transaction.
+The sender adds all sensitive information as the secret input and some other as the public input, creates a zk-SNARK from these, and adds it to a shielded transaction.
 The zk-SNARK expresses the statement that the sender knows secret inputs such that the transaction is valid, e.g., that the sender rightfully claims ownership of a given amount of money.
 Upon inclusion in the blockchain, anyone can verify the zk-SNARK to enforce the transaction's validity.
 Hence, nodes do not do this on public data directly included in the blockchain as in Bitcoin, but on a zk-SNARK, which enables validation of transactions without revealing its secret inputs.
@@ -121,15 +119,15 @@ One reason for this evolution is the willingness to reduce time and space requir
 Creating a transaction type called JoinSplit, which contains a zk-SNARK, takes TODO\SI{1}{\second} and \SI{1}{\gibi\byte} in Sprout and TODO\SI{1}{\second} and \SI{1}{\gibi\byte} in Sapling\footnote{These benchmarks were obtained using hardware described in Section \ref{sec:benchmarks}.}.
 
 There might be situations, where the creation of zk-SNARKs does not have to be done from scratch: the network might have rejected a transaction and the user wants to resend the transaction.
-This document will focus on two cases: insufficient transaction fees, which leads to no miner wanting to include the transaction in a block, and chain reorganizations, where blocks become stale because another, longer\footnote{Longer not in terms of block length but accumulated block difficulty.} branch has overtaken them.
-It will investigate under what circumstances and to what degree the zk-SNARKs in the resent transaction have to be entirely recalculated, modified, or can be left as is.
+This document will focus on two reasons for refusal: insufficient transaction fees, which leads to no miner wanting to include the transaction in a block, and chain reorganizations, where blocks become stale because another, longer\footnote{Longer not in terms of block length but accumulated block difficulty.} branch has overtaken them.
+It will investigate under what circumstances and to what degree the zk-SNARKs in the resent transactions have to be entirely recalculated, modified, or can be left as is.
 The used zk-SNARK is Groth16 \cite{groth:zksnark}, which is used since the Sapling network upgrade.
 Additionally, resending will only be considered for transactions sent by a Zcash full node on that same node.
 With an efficient resending mechanism, we hope to improve performance of the otherwise costly zk-SNARK creation in Sprout and Sapling.
 
-The report is structured as follows: first, some background information is given on JoinSplit descriptions in Zcash, including the Groth16 zk-SNARK using since Sapling.
-Next, the various steps needed to resend a refused transaction are outlined and explained.
-The focus here is on the recreation of the zk-SNARK.
+The report is structured as follows: Section \ref{sec:joinsplit} gives some background information is given on JoinSplit descriptions in Zcash, including the Groth16 zk-SNARK used since Sapling.
+Section \ref{sec:resending} outlines and explains the various steps needed to resend a refused transaction.
+This includes a description of the handled cases of refusal as well as a discussion of optimization methods for resending.
 Once the theory has been covered, a performance comparison of fully recalculating a zk-SNARK and optimized recalculations in various scenarios are be performed.
 The report finishes with a conclusion of the work done and suggestions for future work.
 
@@ -225,7 +223,7 @@ For a rigorous treatment, see the original paper.
 \end{table}
 \end{center}
 
-\subsection{The Groth16 zk-SNARK}
+\subsection{The Groth16 zk-SNARK} \label{sec:groth16}
 
 The Groth16 proving system provides a way to prove statements of the form $x \in L$ for some language $L \in \NP$.
 For Zcash, $x$ would be the public parts of a JoinSplit marked with $^\ast$ in Table \ref{fig:joinsplit} and $L$ is the statement ``$x$ is a valid JoinSplit according to the rules mentioned in Section \ref{sec:joinsplit}''.
@@ -249,15 +247,16 @@ Now, define ARITH-SAT to be the following language:
 
 $C(x,w)$ represents the output of $C$ if wires are assigned the values in $x$ and $w$.
 $x$ is called the ``primary input'', $w$ the ``auxiliary input'' or ``witness'.
+Denote the value of wire $i$, including inputs and wire $0$, by $a_i$.
+Then $x = (a_i)_{i=1}^l$ and $w = (a_i)_{i=l+1}^m$.
 ARITH-SAT is \NP-complete (similarly to how 3-SAT is \NP-complete), so $L \leq_p \text{ARITH-SAT}$ and $x \in L$ can be efficiently converted into a form $x_C \in \text{ARITH-SAT}$.
 
-Denote the value of wire $i$, including inputs and wire $0$, by $a_i$.
 For $n$ multiplication gates in $C$, choose $r_1, \ldots, r_n$ pairwise distinct in $\mathbb{F}_q$.
 
 Next, define a quadratic arithmetic program (QAP) $Q$ as
 
 \begin{align*}
-        Q := \left(\begin{aligned}\{u_i \in \mathbb{F}_q[x] \colon i \in [m]\}, \{v_i \in \mathbb{F}_q[x] \colon i \in [m]\},\\
+        Q := \left(\begin{aligned}\{u_i \in \mathbb{F}_q[x] \colon i \in [m]\},\{v_i \in \mathbb{F}_q[x] \colon i \in [m]\},\\
         \{w_i \in \mathbb{F}_q[x] \colon i \in [m]\}, t \in \mathbb{F}_q[x]\end{aligned}\right)
 \end{align*}
 
@@ -278,7 +277,10 @@ This is given by divisibility by $t$.
 For full details on QAPs, see \cite{gennaro:qap}.
 
 Before proving, we need to setup some shared information $\sigma$ between prover and verifier called the \textit{common reference string}.
-Let $(G_1, +), (G_2, +)$ be two cyclic $q$-order subgroups of points on certain elliptic curves\footnote{Zcash uses the BLS12-381\cite{barreto:bls} curve, so $G_1,G_2$ are chosen accordingly. For full detail, see \cite{hopwood:zcash}. } with generators $g_1, g_2$, respectively.
+Let $(G_1, +), (G_2, +)$ be two cyclic $q$-order subgroups of points on certain elliptic curves with generators $g_1, g_2$, respectively.
+Zcash uses the BLS12-381\cite{barreto:bls} curve, so $G_1,G_2$ are chosen accordingly.
+For full detail, see \cite{hopwood:zcash}.
+
 Sample randomly $\alpha, \beta, \gamma, \delta, \tau \in \mathbb{F}_q$. Define $\sigma := (\sigma_1, \sigma_2)$ as
 
 \begin{adjustbox}{max width=.5\textwidth}
@@ -317,7 +319,7 @@ Given the evaluations of $(g_1{u_i(\tau)})_{i=0}^m$, $(g_1{v_i(\tau)})_{i=0}^m$,
 
 Finally, $\pi$ is verified by using a pairing, in Zcash the optimal ate pairing\cite{vercauteren:optimal-ate}, specifically.
 
-\section{Resending Shielded Transactions}
+\section{Resending Shielded Transactions} \ref{sec:resending}
 
 \begin{figure}[t]
 \includegraphics[width=8cm]{images/timeline.png}
@@ -330,7 +332,7 @@ At some later point, it learns that the transaction has not been included into t
 The node wants to resend the transaction: it checks what fields need to change, recalculates these and finally resends the transaction.
 This process can be repeated until the transaction is in the blockchain.
 
-We assume that the node is capable of sending and resending to an adequate number of peers, such that failure of the physical network never prevents the transaction's inclusion.
+We assume that the node is capable of sending and resending to a sufficient number of peers, such that failure of the network never prevents the transaction's inclusion.
 Hence, we will not deal with the first and the last step of Figure \ref{fig:resend-steps}.
 A node can assume that its transaction has been refused by waiting for the transaction's inclusion and then for its confirmation.
 If the node does not find its transaction in its local blockchain after some time, the transaction has been refused.
@@ -340,11 +342,17 @@ This can happen for a chain reorganization.
 Once it is certain that a transaction has been refused, it must be checked what fields of the JoinSplit must change to maximize the chances of inclusion.
 All JoinSplit fields, which include public inputs to $\pi_\text{ZKJoinSplit}$, as well as all secret inputs are listed in two tables in Table \ref{fig:joinsplit} and \ref{fig:secretinputs}.
 
-Once it is clear what fields must change, the sender must recalculate them.
-By examining the circuit of the JoinSplit statement, we can deduce what other wire assignments change in the circuit.
-The circuit is given in Figure \ref{fig:joinsplit-circuit}.
+Once it is clear what fields must change, the sender must recalculate them and all other wire values that are related in the circuit.
+Based on the new wire values, a new proof $\pi'_\text{ZKJoinSplit}$ is calculated.
+Let $I_\text{changed}$ be the set of indices of coefficients $a_i$ that may change.
+Denote the new coefficients by $a'_i$, where $a'_i \neq a_i \implies i \in I_\text{changed}$.
+We want to find relationships between the calculations made for $\pi_\text{ZKJoinSplit} := (\pi_A, \pi_B, \pi_C)$ and those made for $\pi'_\text{ZKJoinSplit} := (\pi_A', \pi_B', \pi_C')$ such that a maximal amount from the former can be reused for the latter.
+
+\subsection{Finding $I_\text{changed}$}
+
+The circuit that verifies the validity of a JoinSplit is given in Figure \ref{fig:joinsplit-circuit}.
 It is mostly composed of instantiations of the SHA-256 compression function, which is used to prove that a commitment belongs to the 29-layer commitment tree.
-Hence, if the inputs to that part of the JoinSplit circuit happen to stay the same, then we can possibly gain big performance improvements.
+Hence, if the $a_i$ in that part of the JoinSplit circuit happen to stay the same 
 
 \begin{figure}[t]
 \includegraphics[width=8.5cm]{images/joinsplit-groth16-circuit.jpeg}
@@ -352,78 +360,83 @@ Hence, if the inputs to that part of the JoinSplit circuit happen to stay the sa
 \centering
 \end{figure}
 
-\section{Optimizing The zk-SNARK's Recalculation}
+\subsection{Optimizing The zk-SNARK's Recalculation}
 
-$I_\text{changed}$ be the set of indices of changed coefficients $a_i$.
-Denote the new coefficients by $a'_i$, where $a'_i \neq a_i \iff i \in I_\text{changed}$.
-Given $\pi = (\pi_A, \pi_B, \pi_C)$, find new $\pi' = (\pi_A', \pi_B', \pi_C')$.
+The steps involved in the calculation of any proof as described in Section \ref{sec:groth16} are
 
-\begin{algorithm}
-\caption{Calculation of Groth16 as implemented in bellman 0.14.0 used by Zcash v5.5.1.}
-\begin{algorithmic}
-        \Procedure{Prove}{$A$,$B$,$C$}
-                \State $h \gets \Call{ComputeQuotient}{A, B, C, t}$
-                \State $h_\text{exp} \gets {(g_1^{E_2})}^H$
+\begin{enumerate}
+        \item Circuit synthesis; given the public and secret inputs of a JoinSplit, all wire values $a_i$ must be found, 
+        \item calculation of $h$ in (\ref{eq:h}), its coefficients $\boldsymbol{h}$ in particular, and
+        \item the calculation of the proof elements $\pi_A, \pi_B, \pi_C$.
+\end{enumerate}
 
-                \State $l_\text{exp} \gets {(g_1^{E_1})}^{\{a_i \in A \colon i > l\}}$
+Circuit synthesis aims to calculate all wire values $a_i$ that are neither public nor secret inputs such as the intermediate results of the repeated application of SHA-256 to verify that $\text{path}_1, \text{path}_2$ are correct.
 
-                \State $a_\text{prim-exp} \gets \prod_{i=0}^l {(g_1^{u_i(\tau)})}^{a_i}$
-                \State $a_\text{aux-exp} \gets \prod_{i=l+1}^m {(g_1^{u_i(\tau)})}^{a_i}$
+Calculating $h$ involves operations on polynomials.
+To avoid a time complexity of $\mathcal{O}(d^2)$ for $d$-degree polynomials in coefficient representation for multiplication and division, the polynomials are converted to point representation and operations are performed on the points in linear time.
+That conversion is done quickly using fast Fourier transforms (FFT), which computes discrete Fourier transforms in sub-quadratic time.
+For a more detailed description of this method, see \cite{cormen:clrs}.
 
-                \State $b_\text{prim1-exp} \gets \prod_{i=0}^l {(g_1^{v_i(\tau)})}^{a_i}$
-                \State $b_\text{aux1-exp} \gets \prod_{i=l+1}^m {(g_1^{v_i(\tau)})}^{a_i}$
+The proof elements are calculated as described in (\ref{eq:gA}) through (\ref{eq:gC}).
+The main operation here is \textit{multiexponentiation}: given an integer $k$ and base values $b_1, \ldots, b_k$ and exponents $e_1, \ldots, e_k$, compute $b_1^{e_1}b_2^{e_2}\cdots b_k^{e_k}$.
+The sum $\sum_{i=0}^m {(g_1{u_i(\tau)})}{a_i}$ in (\ref{eq:gA}) is one example of this operation (we chose additive notation for $G_1, G_2$, so here, multiexponentiation actually is a dot product between a vector of points on an elliptic curve and a vector of scalars).
 
-                \State $b_\text{prim2-exp} \gets \prod_{i=0}^l {(g_2^{v_i(\tau)})}^{a_i}$
-                \State $b_\text{aux2-exp} \gets \prod_{i=l+1}^m {(g_2^{v_i(\tau)})}^{a_i}$
+Synthesis can be optimized by only recalculating $a'_i$ for $i \in I_\text{changed}$ and copying all other $a_i$.
 
-                % Evaluate A, B, C
-                \State $\pi_A \gets g_1^\alpha \cdot a_\text{prim-exp} \cdot a_\text{aux-exp} \cdot g_1^{r\delta}$
-                \State ${\pi_B}_1 \gets g_1^\beta \cdot b_\text{prim1-exp} \cdot b_\text{aux1-exp} \cdot g_1^{s\delta}$
-                \State ${\pi_B}_2 \gets g_2^\beta \cdot b_\text{prim2-exp} \cdot b_\text{aux2-exp} \cdot g_2^{s\delta}$
-                \State $\pi_C \gets l_\text{exp} \cdot h_\text{exp} \cdot \pi_A^s \cdot {{\pi_B}_1}^r \cdot {g_1}^{-rs\delta}$
+A similar technique of substitution can be applied to $\pi_A$ and $\pi_B$ as well as $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in $\pi_C$.
+Given $\pi_A$, $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}), we want to remove all $a_i$ with $i \in I_\text{change}$ (or $i \in I_\text{change} \cap \{l+1,\ldots,m\}$ for $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$) and replace them with $a'_i$.
+For $\pi_A'$, this is fulfilled by the calculation
 
-                \State \Return $(\pi_A, {\pi_B}_2, \pi_C)$
-        \EndProcedure
-\end{algorithmic}
-\end{algorithm}
+\begin{align*}
+        \pi_A - g_1{\sum_{i \in I_\text{changed}}a_iu_i(\tau)} + g_1{\sum_{i \in I_\text{changed}}a_i'u_i(\tau)} =: \pi_A' \\
+\end{align*}
 
-Focus on multiexponentiations.
+A very similar calculation can be performed for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$.
 
-First, try to optimize $\pi_A'$ and implicitly $\pi_B'$ as it is entirely symmetric.
-Let $A_\text{old} = \sum_{i\in I_\text{changed}} a_i u_i(\tau)$ and $A_\text{new} = \sum_{i\in I_\text{changed}} a_i' u_i(\tau)$.
-Then, we could calculate $\frac{\pi_A\cdot g_1^{A_\text{new}}}{g_1^{A_\text{old}}} = \pi_A'$.
-However, since $\pi_A \neq \pi_A'$, we have $\pi_C \neq \pi_C'$, since $\pi_C'$ involves calculating ${g_1^{A'}}^s$. For that we need knowledge of $s$.
-Similarly for $r$.
-Sampling new $r$ and $s$ prevents replacing coefficients in $\pi_A'$.
-Hence, without knowledge of $r$ and $s$, we cannot apply this method.
+However, by changing $\pi_A = g_1A$ and $g_1B$, we must recalculate ${(g_1A)}s + {(g_1B)}r$ in $\pi_C$.
+This requires knowledge of $r$ and $s$.
+These would need to be stored for each sent transaction for potential resending until its full confirmation, at which moment $r$ and $s$ can be dropped.
 
-Now, consider $\pi_C'$.
-Given knowledge of $r$ and $s$, $b_\text{prim1-exp}$ and $b_\text{aux1-exp}$ could be optimized like $\pi_A'$ and $\pi_B'$.
+For the multiexponentiation $\boldsymbol\sigma_{1,2}\boldsymbol{h}$, such a simple optimization cannot be performed.
+If there exists any $i$ such that $a_i \neq a'_i$, the coefficients of the product polynomial $\sum_{i=0}^ma_iu_i(x)\sum_{i=0}^ma_iv_i(x)$ in (\ref{eq:h}) may all change, which means that all coefficients in $\boldsymbol{h}$ are also affected.
+Therefore, there is no clear, exploitable relationship between the wire values $a_i$ and $\boldsymbol{h}$, unlike the structure of $\pi_A$, for example, where a changed $a_i$ affects $\pi_A$ in a very predictable way.
 
+For similar reasons, we did not optimize the computation of $h$ either.
+We did not find a relationship between a change in $a_i$ and the results of the FFTs used, and therefore did not 
+
+Choosing the encoding of elements in $G_1$ and $G_2$ used for Zcash \cite{hopwood:zcash}, given an integer $1 \leq k < q$, any element $g_1k$ takes 48 bytes and any element $g_2k$ takes 96 bytes.
+$|G_1| = |G_2| = q \approx 2^{255}$, so 32 bytes suffice to represent any value in $\mathbb{F}_q$.
 
 \section{Performance Measurements} \label{sec:benchmarks}
 
 \begin{center}
 \begin{tabular}{ c c }
-        $h_\text{exp} $ & \SI{33}{\second} \\
-        $l_\text{exp}$ & \SI{2}{\second} \\
-        $a_\text{prim-exp}$ & \SI{1}{\milli\second} \\
-        $a_\text{aux-exp}$ & \SI{2}{\second} \\
-        $b_\text{prim1-exp}$ & \SI{1}{\milli\second} \\
-        $b_\text{aux1-exp}$ & \SI{1.4}{\second} \\
-        $b_\text{prim2-exp}$ & \SI{1}{\milli\second} \\
-        $b_\text{aux2-exp}$ & \SI{4.3}{\second}
+        Term & Sequential Time \\
+        \hline
+        $\boldsymbol{\sigma_{1,2}}\boldsymbol{h}$ in (\ref{eq:gC}) & \SI{33}{\second} \\
+        $\boldsymbol{\sigma_{1,1}}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}) & \SI{2}{\second} \\
+        $\sigma_{i=0}^m(g_1u_i(\tau))a_i$ in (\ref{eq:gA}) & \SI{2}{\second} \\
+        $\sigma_{i=0}^m(g_1v_i(\tau))a_i$ in (\ref{eq:g1B}) & \SI{1.4}{\second} \\
+        $\sigma_{i=0}^m(g_2v_i(\tau))a_i$ in (\ref{eq:g2B}) & \SI{4.3}{\second}
 \end{tabular}
 \end{center}
 
-%        g_1^A &= g_1^\alpha \prod_{i=0}^m {(g_1^{u_i(\tau)})}^{a_i} g_1^{r\delta} \label{eq:gA} \\
-%        g_1^B &= g_1^\beta \prod_{i=0}^m {(g_1^{v_i(\tau)})}^{a_i} g_1^{s\delta} \label{eq:g1B} \\
-%        g_2^B &= g_2^\beta \prod_{i=0}^m {(g_2^{v_i(\tau)})}^{a_i} g_2^{s\delta} \label{eq:g2B} \\
-%        g_1^C &= {(g_1^{E_1})}^{\{a_i \in A \colon i > l\}} {(g_1^{E_2})}^H {(g_1^A)}^s {(g_1^B)}^r {g_1}^{-rs\delta} \label{eq:gC} 
-
 \section{Conclusion}
 
+We have provided some ways to optimize the recalculation of a zk-SNARK in previously sent JoinSplit descriptions.
+They incur additional temporary storage requirements per transaction that should not be dramatic for systems capable of running full Zcash nodes.
+Furthermore, the optimizations are fully backwards-compatible such that any user may decide to apply them or not, leaving all other users unaffected.
+
+Even though no measurements of the optimizations have been made, we believe that the improvements in time are minor, given that the most expensive
+computation has not been optimized.
+Additionally, creating new JoinSplit transactions is not supported anymore by current Zcash nodes (v5.5.1).
+
 \section{Outlook}
+
+There are potentially other optimizations that can be made when recalculating the proof.
+While this report only dealt with fully backward-compatible changes, perhaps there are optimizations that require changes of the CRS or the content of JoinSplit descriptions, which would break backward compatibility.
+Furthermore, more recent versions of Zcash support other transaction types such as Spend and Output since Sapling, which are still proved using Groth16 but come with their own circuits.
+$I_\text{changed}$ could be adjusted to these more recent circuits.
 
 %\subsection{Length of Papers}
 %

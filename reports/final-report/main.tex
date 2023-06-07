@@ -59,9 +59,6 @@ Supervised by: Aude Maignan} % Mosig student
 
 \begin{document}
 
-
-
-
 \maketitle
 
 {% Mosig student
@@ -78,7 +75,12 @@ to\hsize{\vrule\kern3pt\vbox{\kern3pt
 }
 
 \begin{abstract}
-        something
+A method to speed up recreation of a zk-SNARK in JoinSplit descriptions of Zcash transactions given another similar, previously created proof is presented.
+
+First, Zcash and zk-SNARKs are introduced, explaining why optimizing the repeated creation of zk-SNARKs is useful in the context of Zcash.
+JoinSplit descriptions are explained, with some focus on the Groth16 proving system.
+Conceivable situations are described when such optimization can be beneficial to performance.
+Finally, the optimization techniques themselves are detailed.
 \end{abstract}
 
 \section{Introduction}
@@ -126,14 +128,14 @@ Additionally, resending will only be considered for transactions sent by a Zcash
 With an efficient resending mechanism, we hope to improve performance of the otherwise costly zk-SNARK creation in Sprout and Sapling.
 
 The report is structured as follows: Section \ref{sec:joinsplit} gives some background information is given on JoinSplit descriptions in Zcash, including the Groth16 zk-SNARK used since Sapling.
-Section \ref{sec:resending} outlines and explains the various steps needed to resend a refused transaction.
-This includes a description of the handled cases of refusal as well as a discussion of optimization methods for resending.
-Once the theory has been covered, a performance comparison of fully recalculating a zk-SNARK and optimized recalculations in various scenarios are be performed.
-The report finishes with a conclusion of the work done and suggestions for future work.
+Section \ref{sec:resending} explains the actual optimization methods.
+This includes a description of the handled cases of transaction refusal as well as practical considerations of these optimizations.
+Section \ref{sec:conclusion} concludes the report, summarizing the results and evaluating their effectiveness.
+Section \ref{sec:future} provides some suggestions for future work.
 
 \section{JoinSplit Descriptions} \label{sec:joinsplit}
 
-In general, transactions in Sprout consist of several fields such as version information or a signature, as well as JoinSplit descriptions (in the following also abbreviated as JoinSplit).
+In general, Sprout transactions consist of several fields such as version information or a signature, as well as JoinSplit descriptions (in the following also abbreviated as JoinSplit).
 Only the latter are relevant to this paper, so we will not detail any further the other parts and only informally explain JoinSplits.
 For a full listing and detailed explanation of transaction elements, see \cite{hopwood:zcash}.
 
@@ -141,16 +143,18 @@ JoinSplit descriptions are composed of the elements in Table \ref{fig:joinsplit}
 The secret input are listed in Table \ref{fig:secretinputs}.
 All data mentioned in this section without explanation can be found in one of these two tables.
 
-A node that sends a JoinSplit creates new shielded notes $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, which contain elements given in their description in Table \ref{fig:secretinputs}.
-The node creates cryptographically hiding and binding commitments of $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$ denoted as $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}$ that represent money sent to one Zcash user.
-The commitments are stored in the leaves of a binary Merkle tree \cite{merkle:tree}, the \textit{commitment tree}.
+A node that sends a JoinSplit creates new shielded notes $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, which contain elements given in their description in Table \ref{fig:secretinputs}, and spends two old shielded notes $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.
+Instead of revealing $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, which would reveal the future owner's public key harming anonymity, the node creates cryptographically hiding and binding commitments of $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$ denoted as $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}$ that represent money sent to one Zcash user.
+These commitments are publicly stored in the leaves of a binary Merkle tree \cite{merkle:tree}, the \textit{commitment tree}.
+There is a one-to-one association between a shielded note and its commitment.
 
-If a user wants to spend two commitments, he proves ownership of these by proving knowledge of $a_\text{sk,$1$}^\text{old}, a_\text{sk,$2$}^\text{old}$ and the commitments' existence in the blockchain by proving their membership in the commitment tree at an earlier time.
-Furthermore, the user reveals nullifiers $\text{nf}_1^\text{old}, {\text{nf}_2^\text{old}}$ that enable other nodes to check if the same commitments are double-spent and prevent that.
-$\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$ are shared only with the receiver, so the user encrypts these and puts them as $C_1^\text{enc}, C_2^\text{enc}$ in the JoinSplit.
+If a user wants to spend two shielded notes, he proves ownership of these by proving knowledge of $a_\text{sk,$1$}^\text{old}, a_\text{sk,$2$}^\text{old}$ and their associated commitments' existence in the blockchain by proving their membership in the commitment tree at an earlier time.
+Furthermore, the user reveals nullifiers $\text{nf}_1^\text{old}, {\text{nf}_2^\text{old}}$ that correspond one-to-one to the shielded notes $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.
+Publishing the nullifiers enables other nodes to check if shielded notes with the same nullifiers have already been spent and prevent double-spending.
+While the public only learns $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}$, the receiver needs the full shielded notes $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, so that he can spend them later on by using them as $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$ in a JoinSplit.
+The spender encrypts these new shielded notes and puts them as $C_1^\text{enc}, C_2^\text{enc}$ in the JoinSplit in a manner such that the receiver can decrypt them, but no one else can.
 Finally, measures against malleability are taken and $\pi_\text{ZKJoinSplit}$ is created.
 
-There is a one-to-one correspondence between nullifiers and commitments and shielded notes.
 A JoinSplit always has two nullifiers and two new commitments.
 To use only one of either, \textit{dummy notes} can be used.
 
@@ -172,7 +176,7 @@ For a rigorous treatment, see the original paper.
         \hline
         \textbf{Name} & \textbf{Description} \\
         \hline
-        \rule{0pt}{4ex} {\small ${v_\text{pub}^\text{old}}^\ast$} & \makecell{A value that is drawn from a transparent input and can be used for new commitments\\ in JoinSplits. $0$ if $v_\text{pub}^\text{new} \neq 0$.} \\
+        \rule{0pt}{4ex} {\small ${v_\text{pub}^\text{old}}^\ast$} & \makecell{A value that is drawn from a transparent input and can be used\\ for new commitments in JoinSplits. $0$ if $v_\text{pub}^\text{new} \neq 0$.} \\
         \hline
         \rule{0pt}{4ex} {\small ${v_\text{pub}^\text{new}}^\ast$} & \makecell{A value that is drawn from a shielded note and can be used for\\ a transparent output. $0$ if $v_\text{pub}^\text{old} \neq 0$.} \\
         \hline
@@ -210,7 +214,7 @@ For a rigorous treatment, see the original paper.
         \hline
         \rule{0pt}{4ex} {\small $a_\text{sk,$1$}^\text{old},a_\text{sk,$2$}^\text{old}$} & \makecell{Secret keys that match $a_\text{pk,$1$}^\text{old}, a_\text{pk,$2$}^\text{old}$. Amongst\\ others, used to prove ownership of $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{new}_i = (a_\text{pk,$i$}^\text{new}, v_i^\text{new}, \rho_i^\text{new}, \text{rcm}_i^\text{new})$\\ The content of the shielded notes about to be produced. $a_\text{pk,$i$}^\text{new}$ \\ is a public key identifying the receiver. $v_i^\text{new}$ is the monetary value\\ sent to the receiver. $\rho_i^\text{new}$ is a unique identifier\\ to avoid double-spending. $\text{rcm}_i^\text{new}$ is a random\\ commitment trapdoor that is part of the commitment scheme.} \\
+        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{new}_i = (a_\text{pk,$i$}^\text{new}, v_i^\text{new}, \rho_i^\text{new}, \text{rcm}_i^\text{new})$\\ The content of the shielded notes about to be produced. $a_\text{pk,$i$}^\text{new}$ \\ is a public key identifying the receiver. $v_i^\text{new}$ is the\\ monetary value sent to the receiver. $\rho_i^\text{new}$ is a unique identifier\\ to avoid double-spending. $\text{rcm}_i^\text{new}$ is a random\\ commitment trapdoor that is part of the commitment scheme.} \\
         \hline
         \rule{0pt}{4ex} {\small \makecell{$\text{enforceMerklePath}_1$,\\ $\text{enforceMerklePath}_2$}} & \makecell{A bit that indicates if the path in the commitment tree \\ should be verified. Set to $0$ for dummy notes.} \\
         \hline
@@ -270,7 +274,7 @@ $Q$ computes an arithmetic circuit $C$ if $x_C = (C,x) \in \text{ARITH-SAT} \iff
 The idea is that $P_Q(r_i) = 0$ corresponds to the statement ``left input times right input minus output equals zero'' for the $i^\text{th}$ multiplication gate.
 Note that the inputs and output are actually not only mere wire values $a_i$, but linear combinations of many wire values.
 Practically, this means that every multiplication gate can subsume many addition and scalar multiplication gates (i.e., linear operations).
-The coefficients of these linear combinations are hardcoded into $Q$'s polynomials using Lagrange interpolation, for example.
+The coefficients of these linear combinations are hardcoded into $Q$'s polynomials using Lagrange interpolation or discrete Fourier transforms (see Section \ref{sec:opt}), for example.
 
 Every multiplication gate is satisfied if and only if $r_1,\ldots,r_n$ are zeros of $P_Q$.
 This is given by divisibility by $t$.
@@ -319,7 +323,7 @@ Given the evaluations of $(g_1{u_i(\tau)})_{i=0}^m$, $(g_1{v_i(\tau)})_{i=0}^m$,
 
 Finally, $\pi$ is verified by using a pairing, in Zcash the optimal ate pairing\cite{vercauteren:optimal-ate}, specifically.
 
-\section{Resending Shielded Transactions} \ref{sec:resending}
+\section{Resending Shielded Transactions} \label{sec:resending}
 
 \begin{figure}[t]
 \includegraphics[width=8cm]{images/timeline.png}
@@ -372,7 +376,6 @@ This last step is out of the control of the JoinSplit description, however, so t
 Changing $v_\text{pub}^\text{new}$ affects the balance equation (\ref{eq:balance}) in Section \ref{sec:joinsplit}, verified by $\pi_\text{ZKJoinSplit}$.
 Increasing $v_\text{pub}^\text{new}$ necessitates a decrease in either the left-hand side or $v_1^\text{new} + v_2^\text{new}$.
 We have $v_\text{pub}^\text{old} = 0$ (see Table \ref{fig:joinsplit}) and changing $v_1^\text{old} + v_2^\text{old}$ would imply a lot more changes because of the tight link to $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$, so we confine ourselves to changing $v_1^\text{new} + v_2^\text{new}$.
-This assumes that at least one of these is non-zero.
 Assuming in addition that one of $v_1^\text{new}$ and $v_2^\text{new}$ is sufficient, w.l.o.g. we choose $v_1^\text{new}$.
 In addition, $v_1^\text{new}$ is included in $\boldsymbol{n}^\text{new}_1$, so $\text{cm}_1^\text{new}$ must be recalculated.
 
@@ -380,16 +383,12 @@ In total, this makes for a set $I_\text{changed}$ of size
 
 \begin{align*}
         |I_\text{changed}| = \underbrace{1}_\text{$v_\text{pub}^\text{new}$ in $\mathbb{F}_q$} &+ \underbrace{64}_\text{$v_\text{pub}^\text{new}$ in binary} + \underbrace{64}_\text{$v_1^\text{new}$ in binary} \\
-        &+ \underbrace{51510}_\text{SHA-256 calculation of $\text{cm}_1$}
+        &+ \underbrace{51510}_\text{SHA-256 calculation of $\text{cm}_1$} = 51639
 \end{align*}
 
 which is only $\approx 2.6\%$ of all wires.
 
-%\begin{figure}[t]
-%\includegraphics[width=8.5cm]{images/joinsplit-groth16-circuit.jpeg}
-%\caption{The JoinSplit statement implemented in bellman used in Sapling. The blocks corresponding to the SHA-256 compression function are framed. There are $2\cdot 29$ of them: 29 is the depth of the commitment tree and times $2$ because there are two input commitments.} \label{fig:joinsplit-circuit}
-%\centering
-%\end{figure}
+TODO: same for chain reorganization.
 
 \subsection{Optimizing The zk-SNARK's Recalculation} \label{sec:opt}
 
@@ -414,15 +413,18 @@ The sum $\sum_{i=0}^m {(g_1{u_i(\tau)})}{a_i}$ in (\ref{eq:gA}) is one example o
 
 Synthesis can be optimized by only recalculating $a'_i$ for $i \in I_\text{changed}$ and copying all other $a_i$.
 
-A similar technique of substitution can be applied to $\pi_A$ and $\pi_B$ as well as $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in $\pi_C$.
+A similar technique of substitution can be applied to $\pi_A$ and $\pi_B$ as well as $g_1B$ and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in $\pi_C$.
 Given $\pi_A$, $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}), we want to remove all $a_i$ with $i \in I_\text{changed}$ (or $i \in I_\text{changed} \cap \{l+1,\ldots,m\}$ for $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$) and replace them with $a'_i$.
-For $\pi_A'$, this is fulfilled by the calculation
+Define $\pi^-_A := g_1{\sum_{i \in I_\text{changed}}a_iu_i(\tau)}$.
+Then, for $\pi_A'$, this replacement is fulfilled by the calculation
 
 \begin{align*}
-        \pi_A - g_1{\sum_{i \in I_\text{changed}}a_iu_i(\tau)} + g_1{\sum_{i \in I_\text{changed}}a_i'u_i(\tau)} =: \pi_A' \\
+        \pi_A - \pi^-_A + g_1{\sum_{i \in I_\text{changed}}a_i'u_i(\tau)} =: \pi_A' \\
 \end{align*}
 
-A very similar calculation can be performed for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$.
+We have created $\pi_A'$ by doing a multiexponentiation using the indices in $i \in I_\text{changed}$ instead of the full range of indices.
+If $I_\text{changed}$ is sufficiently small, this may lead to a performance boost.
+Defining terms like $\pi^-_A$, very similar calculations can be performed for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$, respectively.
 
 However, by changing $\pi_A = g_1A$ and $g_1B$, we must recalculate ${(g_1A)}s + {(g_1B)}r$ in $\pi_C$.
 This requires knowledge of $r$ and $s$.
@@ -437,11 +439,13 @@ We did not find a relationship between a change in $a_i$ and the results of the 
 
 \subsection{Practicality Of The Optimizations} \label{sec:benchmarks}
 
-Choosing the encoding of elements in $G_1$ and $G_2$ used for Zcash \cite{hopwood:zcash}, given an integer $1 \leq k < q$, any element $g_1k$ takes 48 bytes and any element $g_2k$ takes 96 bytes.
-$|G_1| = |G_2| = q \approx 2^{255}$, so 32 bytes suffice to represent any value in $\mathbb{F}_q$.
+In order to understand the relative usefulness of speeding up each computation, proof creation of $\pi_\text{ZKJoinSplit}$ was benchmarked.
+The used system was TODO.
+Any parallelism was disabled for ease of benchmarking.  % TODO: justify even though some are better parallelizable
+The obtained measurements were the following (anything below $\SI{1}{\milli\second}$ is not considered):
 
 \begin{center}
-\begin{tabular}{ c c }
+\begin{tabular}{ c|c }
         Term & Sequential Time \\
         \hline
         $\boldsymbol{\sigma_{1,2}}\boldsymbol{h}$ in (\ref{eq:gC}) & \SI{33}{\second} \\
@@ -452,7 +456,22 @@ $|G_1| = |G_2| = q \approx 2^{255}$, so 32 bytes suffice to represent any value 
 \end{tabular}
 \end{center}
 
-\section{Conclusion}
+The multiexponentiation $\boldsymbol{\sigma_{1,2}}\boldsymbol{h}$ takes by far the longest time.
+Unfortunately, as explained in Section \ref{sec:opt}, we have not found a viable optimization for that operation.
+This severely limits the usefulness of our optimizations in the real world.
+
+The values needed to store after sending a transaction and before notification of full confirmation are $r,s \in \mathbb{F}_q$ and $\pi^-_A$, as well as the similar values for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$.
+Choosing the encoding of elements in $G_1$ and $G_2$ used for Zcash \cite{hopwood:zcash} any element in $G_1$ takes 48 bytes and any element in $G_2$ takes 96 bytes.
+$q \approx 2^{255}$, so 32 bytes suffice to represent any value in $\mathbb{F}_q$.
+
+This makes for a total additional storage requirement in bytes per transaction of
+
+\begin{align*}
+        \underbrace{2\cdot 32}_\text{$r,s \in \mathbb{F}_q$} &+ \underbrace{3\cdot 48}_\text{$\pi^-_A \in G_1$ and similar values for $g_1B$ and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$} \\
+        &+ \underbrace{96}_\text{The equivalent of $\pi^-_A$ for $\pi_B$ in $G_2$} = 304
+\end{align*}
+
+\section{Conclusion} \label{sec:conclusion}
 
 We have provided some ways to optimize the recalculation of a zk-SNARK in previously sent JoinSplit descriptions.
 They incur additional temporary storage requirements per transaction that should not be dramatic for systems capable of running full Zcash nodes.
@@ -462,12 +481,13 @@ Even though no measurements of the optimizations have been made, we believe that
 computation has not been optimized.
 Additionally, creating new JoinSplit transactions is not supported anymore by current Zcash nodes (v5.5.1).
 
-\section{Outlook}
+\section{Outlook} \label{sec:future}
 
 There are potentially other optimizations that can be made when recalculating the proof.
 While this report only dealt with fully backward-compatible changes, perhaps there are optimizations that require changes of the CRS or the content of JoinSplit descriptions, which would break backward compatibility.
 Furthermore, more recent versions of Zcash support other transaction types such as Spend and Output since Sapling, which are still proved using Groth16 but come with their own circuits.
-$I_\text{changed}$ could be adjusted to these more recent circuits.
+$I_\text{changed}$ would need to be adjusted to these more recent circuits.
+Other scenarios than the two treated in this report may be examined as well, which would require further adjustment of $I_\text{changed}$.
 
 %\subsection{Length of Papers}
 %

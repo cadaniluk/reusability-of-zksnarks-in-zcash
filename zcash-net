@@ -7,15 +7,9 @@ if [ "$NUMNODES" = "" ]; then echo "Number of nodes expected." >&2; return 1; fi
 
 PATH=$PATH:zcash/src
 
-mkdir -p logs
-LOGFILE=logs/all.log.0
-# find next unused log file name
-while [ -f $LOGFILE ]; do i=$((i + 1)); LOGFILE=logs/all.log.$i; done
-
 for i in $(seq 0 $((NUMNODES - 1))); do
 	mkdir -p "node$i"
 	touch "node$i"/zcash.conf
-	zcashd -printtoconsole -debug -regtest -datadir="node$i" -conf=zcash.conf \
-		-port=$((40000 + i)) -rpcport=$((50000 + i)) \
-		| sed -e 's/^/[NODE'$i'] /' 2>&1 >> $LOGFILE &
+	zcashd -debug -regtest -datadir="node$i" -conf=zcash.conf \
+	        -port=$((40000 + i)) -rpcport=$((50000 + i)) -nuparams=c2d6d0b4:1 &
 done

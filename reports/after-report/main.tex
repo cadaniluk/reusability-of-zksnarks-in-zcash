@@ -1,0 +1,60 @@
+\documentclass{article}
+
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{etoolbox}
+\usepackage{float}
+\usepackage[a4paper, total={6in, 8in}]{geometry}
+
+\title{Halo 2}
+\date{}
+
+\setlength{\parindent}{0pt}
+\AtBeginEnvironment{quote}{\par\singlespacing\small}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\section{Introduction}
+
+Starting from the Orchard update of Zcash, Halo 2 replaces Groth16 as the new proving system.
+This document will explain how Halo 2 works and how it is used both from a theoretical and practical standpoint.
+
+The goal of this document is not to be a self-contained explanation, but rather a description of how the wide variety of sources on Halo 2 and zero-knowledge proofs fits together and interconnects.
+Therefore, references are everywhere and explanations are intuitive and informal.
+
+\section{Resources on zk-SNARKs} \label{sec:resources}
+
+\textit{zk-SNARKs: A Gentle Introduction} \cite{nitulescu:zksnarks} provides an overview of current practical zk-SNARK constructions.
+Halo 2 is a polynomial interactive oracle proof (PIOP) that is made non-interactive using the Fiat-Shamir transformation.
+
+The zkStudyClub \cite{zkstudyclub} is a YouTube playlist that expains a lot of contemporary research on zk-SNARKs and zero-knowledge proofs in general.
+
+There is a Discord server on the Halo 2 Ecosystem that is publicly accessible, where Zcash developers answer individual questions on Halo 2 and related topics.
+
+\section{The Halo 2 Proving System}
+
+The official reference for Halo 2 is the Halo 2 Book \cite{zcash:halo2}.
+A previous version of Halo 2 called Halo is described in \cite{bowe:halo}.
+Halo and Halo 2 have the core concepts in common, such as polynomial commitments using inner product arguments or an accumulation scheme to enable recursive proofs, but differ in that Halo builds on Sonic \cite{maller:sonic} while Halo 2 builds on PLONK \cite{gabizon:plonk} as well as other details.
+
+A master thesis from Aarhus university \cite{schmidt:halo2} elaborates on \cite{zcash:halo2} and explains the basic concepts of Halo 2 very well.
+
+\section{Usage in Zcash}
+
+Halo 2 does not rely on a trusted setup.
+While the two previous proving systems, BCTV14 and Groth16, needed an MPC ceremony to create a trusted setup, this is not needed anymore.
+A video of the (rather spectacular) MPC ceremony for BCTV14 is available on YouTube \cite{bctv14-setup}.
+
+Furthermore, Halo 2 enables recursive proofs, referring to the possibility of proving the successful verification of another proof.
+This is used in Zcash to bundle multiple Action descriptions and create a single proof for the validity of all Action descriptions.
+
+\bibliographystyle{plain}
+\bibliography{../bib}
+
+\end{document}

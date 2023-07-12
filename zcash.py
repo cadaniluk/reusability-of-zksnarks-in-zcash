@@ -34,7 +34,7 @@ def getblockio_req(*data):
     return json.loads(resp.read())
 
 def usage():
-    print(f'Usage:\n{sys.argv[0]} [<normal RPC>|find-anchor <height> <anchor>|getblock <start-end>]|find-shielded <start-end>|show-tx <txid>')
+    print(f'Usage:\n{sys.argv[0]} [<normal RPC>|find-anchor <height> <anchor>|getblock <start-end>]|find-joinsplit <start-end>|find-spend-or-output <start-end>|find-action <start-end>|show-tx <txid>')
     quit()
 
 def main():
@@ -72,14 +72,43 @@ def main():
                 else:
                     continue
                 break
-        case 'find-shielded':
+        case 'find-joinsplit':
             end, start = parse_range(sys.argv[2])
             for blocks in chunks(end, start, verbosity=2):
                 print(f'Searching {blocks[-1]["result"]["height"]}-{blocks[0]["result"]["height"]}...')
                 for block in blocks:
                     for tx in block['result']['tx']:
-                        if tx['vjoinsplit'] != [] or tx.get('vShieldedSpend', []) != [] \
-                                or tx.get('vShieldedOutput', []) != []:
+                        if tx.get('vjoinsplit', []) != []:
+                            print(f'Found shielded transaction in block {block["result"]["height"]}, TX {tx["txid"]}.')
+                            break
+                    else:
+                        continue
+                    break
+                else:
+                    continue
+                break
+        case 'find-spend-or-output':
+            end, start = parse_range(sys.argv[2])
+            for blocks in chunks(end, start, verbosity=2):
+                print(f'Searching {blocks[-1]["result"]["height"]}-{blocks[0]["result"]["height"]}...')
+                for block in blocks:
+                    for tx in block['result']['tx']:
+                        if tx.get('vShieldedSpend', []) != [] or tx.get('vShieldedOutput', []) != []:
+                            print(f'Found shielded transaction in block {block["result"]["height"]}, TX {tx["txid"]}.')
+                            break
+                    else:
+                        continue
+                    break
+                else:
+                    continue
+                break
+        case 'find-action':
+            end, start = parse_range(sys.argv[2])
+            for blocks in chunks(end, start, verbosity=2):
+                print(f'Searching {blocks[-1]["result"]["height"]}-{blocks[0]["result"]["height"]}...')
+                for block in blocks:
+                    for tx in block['result']['tx']:
+                        if tx.get('orchard', []) != []:
                             print(f'Found shielded transaction in block {block["result"]["height"]}, TX {tx["txid"]}.')
                             break
                     else:

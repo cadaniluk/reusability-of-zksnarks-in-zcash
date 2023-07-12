@@ -75,12 +75,11 @@ to\hsize{\vrule\kern3pt\vbox{\kern3pt
 }
 
 \begin{abstract}
-A method to speed up recreation of a zk-SNARK in JoinSplit descriptions of Zcash transactions given another similar, previously created proof is presented.
-
-First, Zcash and zk-SNARKs are introduced, explaining why optimizing the repeated creation of zk-SNARKs is useful in the context of Zcash.
-JoinSplit descriptions are explained, with some focus on the Groth16 proving system.
+A method to speed up repeated creation of a zk-SNARK in JoinSplit descriptions of Zcash transactions given another similar, previously created zk-SNARK is presented.
+The cryptocurrency Zcash and zk-SNARKs are introduced, explaining why optimizing the repeated creation of zk-SNARKs is useful in the context of Zcash.
+A mechanism using zk-SNARKs to send money in Zcash called JoinSplit description is explained, with some focus on the Groth16 proving system.
 Conceivable situations are described when such optimization can be beneficial to performance.
-Finally, the optimization techniques themselves are detailed.
+The optimization techniques themselves are detailed.
 \end{abstract}
 
 \section{Introduction}
@@ -97,19 +96,20 @@ A user may employ an arbitrary number of pseudonyms to hide their true identity 
 Hence, people have tried improving anonymity in new cryptocurrencies such as Monero \cite{saberhagen:cryptonote} or Zcash \cite{hopwood:zcash}.
 Zcash is the one this internship is focusing on.
 
-Zcash still uses a blockchain, but to make stronger anonymity guarantees than Bitcoin, Zcash offers shielded transactions as well as transparent transactions inherited from Bitcoin.
+Zcash still uses a blockchain, but to make stronger anonymity guarantees than Bitcoin, Zcash offers partially or fully shielded transactions as well as transparent transactions inherited from Bitcoin.
 While the latter leak data such as the pseudonyms of senders and receivers, the former hide it by either encrypting sensitive information on the blockchain in an anonymity-preserving way or not including it at all.
 This lack of inclusion needs additional care, however, since classical Bitcoin nodes need some public information such as a sender's pseudonym to enforce the blockchain's validity.
-To this end, a cryptographic construct called zero-knowledge succinct non-interactive argument of knowledge (zk-SNARK) is used.
+To this end, a cryptographic construct called \textit{zero-knowledge succinct non-interactive argument of knowledge} (zk-SNARK) is used.
 A zk-SNARK has public and secret inputs.
 The former are publicly known, the latter are only known to the sender.
 The sender adds all sensitive information as the secret input and some other as the public input, creates a zk-SNARK from these, and adds it to a shielded transaction.
-The zk-SNARK expresses the statement that the sender knows secret inputs such that the transaction is valid, e.g., that the sender rightfully claims ownership of a given amount of money.
+The zk-SNARK expresses the statement that the sender knows secret inputs such as the monetary value of the inputs such that the transaction is valid:
+for example, it is verified that the sender rightfully claims ownership of a given amount of money.
 Upon inclusion in the blockchain, anyone can verify the zk-SNARK to enforce the transaction's validity.
 Hence, nodes do not do this on public data directly included in the blockchain as in Bitcoin, but on a zk-SNARK, which enables validation of transactions without revealing its secret inputs.
 
 The various properties of zk-SNARKs render them useful in Zcash: they are zero-knowledge, meaning that they prove statements given secret inputs without revealing them.
-Their succinctness makes for proofs of small size.
+Their succinctness makes for proofs of small size and short verification time by nodes in the Zcash network.
 Since they are non-interactive, unlike proposed by, for example, the foundational paper of zero-knowledge proofs \cite{goldwasser:zk}, they can be included in the blockchain without further communication between sender and other parties.
 Finally, they are arguments, meaning that a malicious, computationally bounded sender cannot fake proofs to mislead nodes in the network.
 More specifically, they are arguments of knowledge, which means that not only do secret inputs exist that satisfy the proven statement, but also that the prover knows them.
@@ -117,19 +117,20 @@ For a formal definition of zk-SNARKs, see \cite{groth:zksnark}, for example.
 
 Beyond its theoretical definition, zk-SNARKs steadily evolve to make them even more practical.
 In Zcash alone, three different zk-SNARKs (\cite{bensasson:zksnark} in the Sprout version, \cite{groth:zksnark} in the Sapling version, \cite{zcash:halo2} in the Orchard version) have been used throughout the protocol's history.
-One reason for this evolution is the willingness to reduce time and space requirements of the creation zk-SNARKs.
-Creating a transaction type called JoinSplit, which contains a zk-SNARK, takes TODO\SI{1}{\second} and \SI{1}{\gibi\byte} in Sprout and TODO\SI{1}{\second} and \SI{1}{\gibi\byte} in Sapling\footnote{These benchmarks were obtained using hardware described in Section \ref{sec:benchmarks}.}.
+One reason for this evolution is the effort to reduce time and space requirements of the creation of zk-SNARKs:
+we have measured JoinSplit descriptions, a certain method to send money in a shielded way (see Section \ref{sec:joinsplit}) using a zk-SNARK, to take about \SI{25}{\second} in time and about \SI{1}{\gibi\byte} in space (the computer used for these measurements is given in Section \ref{sec:benchmarks}) on a current Zcash node (zcashd v5.5.1).
 
-There might be situations, where the creation of zk-SNARKs does not have to be done from scratch: the network might have rejected a transaction and the user wants to resend the transaction.
-This document will focus on two reasons for refusal: insufficient transaction fees, which leads to no miner wanting to include the transaction in a block, and chain reorganizations, where blocks become stale because another, longer\footnote{Longer not in terms of block length but accumulated block difficulty.} branch has overtaken them.
+There might be situations where the creation of zk-SNARKs does not have to be done from scratch: the network might have rejected a transaction containing a JoinSplit description and the user wants to resend it, so information from the previous transaction could be reusable.
+This document will focus on two reasons for rejection: insufficient transaction fees, which leads to no miner wanting to include the transaction in a block, and chain reorganizations, where blocks become stale because another branch with higher total work performed by miners has overtaken them (more detail is given in Section \ref{sec:changed}).
 It will investigate under what circumstances and to what degree the zk-SNARKs in the resent transactions have to be entirely recalculated, modified, or can be left as is.
 The used zk-SNARK is Groth16 \cite{groth:zksnark}, which is used since the Sapling network upgrade.
-Additionally, resending will only be considered for transactions sent by a Zcash full node on that same node.
-With an efficient resending mechanism, we hope to improve performance of the otherwise costly zk-SNARK creation in Sprout and Sapling.
+While it is used for other sending mechanisms than JoinSplit descriptions, only these shall be considered in this report.
+Additionally, resending will only be considered for transactions sent by a Zcash full node on that same node; there are also lightweight clients, which store less information and are therefore usable on less powerful computers, but these are not considered.
+With an efficient resending mechanism, we hope to improve performance of the otherwise costly zk-SNARK creation of JoinSplit descriptions in Sprout and Sapling.
 
-The report is structured as follows: Section \ref{sec:joinsplit} gives some background information is given on JoinSplit descriptions in Zcash, including the Groth16 zk-SNARK used since Sapling.
+The report is structured as follows: Section \ref{sec:joinsplit} gives some background information on JoinSplit descriptions in Zcash, including the Groth16 zk-SNARK used since Sapling.
 Section \ref{sec:resending} explains the actual optimization methods.
-This includes a description of the handled cases of transaction refusal as well as practical considerations of these optimizations.
+This includes a description of the handled cases of transaction rejection as well as practical considerations of these optimizations.
 Section \ref{sec:conclusion} concludes the report, summarizing the results and evaluating their effectiveness.
 Section \ref{sec:future} provides some suggestions for future work.
 
@@ -139,16 +140,19 @@ In general, Sprout transactions consist of several fields such as version inform
 Only the latter are relevant to this paper, so we will not detail any further the other parts and only informally explain JoinSplits.
 For a full listing and detailed explanation of transaction elements, see \cite{hopwood:zcash}.
 
-JoinSplit descriptions are composed of the elements in Table \ref{fig:joinsplit}, which also contains public inputs to $\pi_\text{ZKJoinSplit}$.
-The secret input are listed in Table \ref{fig:secretinputs}.
-All data mentioned in this section without explanation can be found in one of these two tables.
+JoinSplit descriptions are composed of the elements in Table \ref{fig:joinsplit}, which also contains public inputs to the zk-SNARK $\pi_\text{ZKJoinSplit}$.
+The secret inputs to $\pi_\text{ZKJoinSplit}$ are listed in Table \ref{fig:secretinputs}.
+All fields mentioned in this section are detailed in these two tables.
 
-A node that sends a JoinSplit creates new shielded notes $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, which contain elements given in their description in Table \ref{fig:secretinputs}, and spends two old shielded notes $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.
-Instead of revealing $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, which would reveal the future owner's public key harming anonymity, the node creates cryptographically hiding and binding commitments of $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$ denoted as $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}$ that represent money sent to one Zcash user.
+As the name says, a JoinSplit joins the value of two old \textit{shielded notes} that represent some monetary value and splits that sum into two new shielded notes.
+A note is owned by a Zcash user, so JoinSplits can be used to send money (the owner of old and new notes differs) to one or two recipients without publicly revealing any user's identity or to arrange money in different ways in one user's wallet (the owner of old and new notes is the same).
+Concretely, a node that sends a JoinSplit creates new shielded notes $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, which contain elements given in their description in Table \ref{fig:secretinputs}, and spends two old shielded notes $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.
+Instead of revealing $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, which would reveal the future owner's public key harming anonymity, the node creates cryptographically hiding and binding commitments of $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$ denoted by $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}$.
 These commitments are publicly stored in the leaves of a binary Merkle tree \cite{merkle:tree}, the \textit{commitment tree}.
+This tree evolves with each JoinSplit added to the blockchain and has well-defined states after every block and every JoinSplit.
 There is a one-to-one association between a shielded note and its commitment.
 
-If a user wants to spend two shielded notes, he proves ownership of these by proving knowledge of $a_\text{sk,$1$}^\text{old}, a_\text{sk,$2$}^\text{old}$ and their associated commitments' existence in the blockchain by proving their membership in the commitment tree at an earlier time.
+If a user wants to spend two shielded notes, he proves ownership of these by proving knowledge of the secret spending keys $a_\text{sk,$1$}^\text{old}, a_\text{sk,$2$}^\text{old}$ and their associated commitments' existence by proving their membership in the commitment tree of some block or JoinSplit.
 Furthermore, the user reveals nullifiers $\text{nf}_1^\text{old}, {\text{nf}_2^\text{old}}$ that correspond one-to-one to the shielded notes $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.
 Publishing the nullifiers enables other nodes to check if shielded notes with the same nullifiers have already been spent and prevent double-spending.
 While the public only learns $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}$, the receiver needs the full shielded notes $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$, so that he can spend them later on by using them as $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$ in a JoinSplit.
@@ -184,11 +188,11 @@ For a rigorous treatment, see the original paper.
         \hline
         \rule{0pt}{4ex} {\small $\text{nf}_1^\text{old}, {\text{nf}_2^\text{old}}^\ast$} & \makecell{Nullifiers that refer to shielded notes and are made public to prevent\\ double-spending.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}^\ast$} & Commitments to new shielded notes. \\
+        \rule{0pt}{4ex} {\small $\text{cm}_1^\text{new}, {\text{cm}_2^\text{new}}^\ast$} & \makecell{Commitments to new shielded notes. For $i \in \{1,2\}$,\\ $\text{cm}_i^\text{new}$ is calculated from $\boldsymbol{n}^\text{new}_i$ as follows:\\$\text{cm}_i^\text{new} = \text{SHA-256}(\text{0xB0} \mid a_\text{pk,$i$}^\text{new} \mid v_i^\text{new} \mid \rho_i^\text{new} \mid \text{rcm}_i^\text{new})$\\ where $\mid$ denotes bitwise concatenation.} \\
         \hline
-        \rule{0pt}{4ex} {\small epk} & A public key relevant to the creation of $C_1^\text{new}, C_2^\text{new}$. \\
+        \rule{0pt}{4ex} {\small epk} & A public key relevant to the creation of $C_1^\text{enc}, C_2^\text{enc}$. \\
         \hline
-        \rule{0pt}{4ex} {\small randomSeed} & \makecell{A random value that is used in the creation of $C_1^\text{new}, C_2^\text{new}$ and\\ $h_1, h_2$.} \\
+        \rule{0pt}{4ex} {\small randomSeed} & \makecell{A random value that is used in the creation of $C_1^\text{enc}, C_2^\text{enc}$ and\\ $h_1, h_2$.} \\
         \hline
         \rule{0pt}{4ex} {\small $h_1, h_2^\ast$} & MAC tags that help enforcing non-malleability of the JoinSplit. \\
         \hline
@@ -210,17 +214,17 @@ For a rigorous treatment, see the original paper.
         \hline
         \rule{0pt}{4ex} {\small $\varphi$} & \makecell{A randomly sampled value used to verify\\ uniqueness of $\rho_1^\text{new}, \rho_2^\text{new}$.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{old}_i = (a_\text{pk,$i$}^\text{old}, v_i^\text{old}, \rho_i^\text{old}, \text{rcm}_i^\text{old})$\\ The content of the shielded notes about to be spent\\ by revealing their associated nullifier. $a_\text{pk,$i$}^\text{old}$ \\ is a public key identifying the owner. $v_i^\text{old}$ is the monetary value\\ contained in the shielded note. $\rho_i^\text{old}$ is a unique identifier\\ to avoid double-spending. $\text{rcm}_i^\text{old}$ is a random\\ commitment trapdoor that is part of the commitment scheme.} \\
+        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{old}_i = (a_\text{pk,$i$}^\text{old}, v_i^\text{old}, \rho_i^\text{old}, \text{rcm}_i^\text{old})$\\ The content of the shielded notes about to be spent\\ by revealing their associated nullifier.\\ $a_\text{pk,$i$}^\text{old}$ is a public key identifying the owner. $v_i^\text{old}$ is\\ the monetary value contained in the shielded note. $\rho_i^\text{old}$\\ is a unique identifier to avoid double-spending. $\text{rcm}_i^\text{old}$\\ is a random commitment trapdoor that is part of the\\ commitment scheme.} \\
         \hline
         \rule{0pt}{4ex} {\small $a_\text{sk,$1$}^\text{old},a_\text{sk,$2$}^\text{old}$} & \makecell{Secret keys that match $a_\text{pk,$1$}^\text{old}, a_\text{pk,$2$}^\text{old}$. Amongst\\ others, used to prove ownership of $\boldsymbol{n}^\text{old}_1,\boldsymbol{n}^\text{old}_2$.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{new}_i = (a_\text{pk,$i$}^\text{new}, v_i^\text{new}, \rho_i^\text{new}, \text{rcm}_i^\text{new})$\\ The content of the shielded notes about to be produced. $a_\text{pk,$i$}^\text{new}$ \\ is a public key identifying the receiver. $v_i^\text{new}$ is the\\ monetary value sent to the receiver. $\rho_i^\text{new}$ is a unique identifier\\ to avoid double-spending. $\text{rcm}_i^\text{new}$ is a random\\ commitment trapdoor that is part of the commitment scheme.} \\
+        \rule{0pt}{4ex} {\small $\boldsymbol{n}^\text{new}_1,\boldsymbol{n}^\text{new}_2$} & \makecell{$\forall i \in \{1,2\}\colon \boldsymbol{n}^\text{new}_i = (a_\text{pk,$i$}^\text{new}, v_i^\text{new}, \rho_i^\text{new}, \text{rcm}_i^\text{new})$\\ The content of the shielded notes about to be produced.\\ $a_\text{pk,$i$}^\text{new}$ is a public key identifying the receiver. $v_i^\text{new}$ is the\\ monetary value sent to the receiver. $\rho_i^\text{new}$ is a unique\\ identifier to avoid double-spending. $\text{rcm}_i^\text{new}$ is a\\ random commitment trapdoor that is part of the\\ commitment scheme.} \\
         \hline
         \rule{0pt}{4ex} {\small \makecell{$\text{enforceMerklePath}_1$,\\ $\text{enforceMerklePath}_2$}} & \makecell{A bit that indicates if the path in the commitment tree \\ should be verified. Set to $0$ for dummy notes.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\text{path}_1,\text{path}_2$} & The path of the respective commitment in the commitment tree. \\
+        \rule{0pt}{4ex} {\small $\text{path}_1,\text{path}_2$} & \makecell{The path of the respective commitment in the\\ commitment tree.} \\
         \hline
-        \rule{0pt}{4ex} {\small $\text{pos}_1, \text{pos}_2$} & \makecell{The index of the respective commitment in the leaves of \\ the commitment tree. The leaves are enumerated from \\ left to right starting from $0$. Empty leaves have the value $0$.} \\
+        \rule{0pt}{4ex} {\small $\text{pos}_1, \text{pos}_2$} & \makecell{The index of the respective commitment in the leaves of \\ the commitment tree. The leaves are enumerated\\ from left to right starting from $0$. Empty\\ leaves have the value $0$.} \\
         \hline
 \end{tabular}}
 \caption{The secret inputs to $\pi_\text{ZKJoinSplit}$. The fields' names are the same ones as in the original \protect\cite{hopwood:zcash}.} \label{fig:secretinputs}
@@ -230,7 +234,7 @@ For a rigorous treatment, see the original paper.
 \subsection{The Groth16 zk-SNARK} \label{sec:groth16}
 
 The Groth16 proving system provides a way to prove statements of the form $x \in L$ for some language $L \in \NP$.
-For Zcash, $x$ would be the public parts of a JoinSplit marked with $^\ast$ in Table \ref{fig:joinsplit} and $L$ is the statement ``$x$ is a valid JoinSplit according to the rules mentioned in Section \ref{sec:joinsplit}''.
+For Zcash, $x$ would be the public input to $\pi_\text{ZKJoinSplit}$ marked with $^\ast$ in Table \ref{fig:joinsplit} and $L$ is the statement ``$x$ is a valid JoinSplit according to the rules mentioned in Section \ref{sec:joinsplit}''.
 In this section, we will show informally how a zk-SNARK is produced from such a statement $x \in L$ by reducing $L$ to another problem ARITH-SAT and then encoding ARITH-SAT as a so-called QAP for the creation of $\pi_\text{ZKJoinSplit}$.
 
 $L \in \NP$, so there exists an efficient algorithm $A(x, w)$ such that
@@ -238,7 +242,7 @@ $L \in \NP$, so there exists an efficient algorithm $A(x, w)$ such that
 \begin{align*} L = \{ x \in \{0,1\}^\ast \colon \exists w \in \{0,1\}^\ast\colon A(x, w) = 0\} \end{align*}
 
 For Zcash, $w$ corresponds to the secret inputs to $\pi_\text{ZKJoinSplit}$ in Table \ref{fig:secretinputs}.
-Now, let $\mathbb{F}_q$ be a $q$-order finite field.
+Now, let $q$ be prime and $\mathbb{F}_q$ be a $q$-order finite field.
 For an arithmetic circuit\footnote{For an illustrative image of an arithmetic circuit, see \cite{gennaro:qap} Figure 1.} $C$, let $m + 1$ be the number of wires of $C$, including inputs.
 Let $l$ be the number of public inputs and w.l.o.g. assign wires $1$ through $l$ to them.
 For practical purposes, wire $0$ is assumed to carry the value $1$.
@@ -250,8 +254,8 @@ Now, define ARITH-SAT to be the following language:
 \end{align*}
 
 $C(x,w)$ represents the output of $C$ if wires are assigned the values in $x$ and $w$.
-$x$ is called the ``primary input'', $w$ the ``auxiliary input'' or ``witness'.
-Denote the value of wire $i$, including inputs and wire $0$, by $a_i$.
+$x$ is called the ``primary input'', $w$ the ``auxiliary input'' or ``witness''.
+Denote the value of wire $i$, including both inputs and wire $0$, by $a_i$.
 Then $x = (a_i)_{i=1}^l$ and $w = (a_i)_{i=l+1}^m$.
 ARITH-SAT is \NP-complete (similarly to how 3-SAT is \NP-complete), so $L \leq_p \text{ARITH-SAT}$ and $x \in L$ can be efficiently converted into a form $x_C \in \text{ARITH-SAT}$.
 
@@ -302,7 +306,7 @@ Given $Q$, the prover now calculates $h \in \mathbb{F}_q[x]$ as
 \begin{align}h(x) := \frac{\sum_{i=0}^m a_iu_i(x) \cdot \sum_{i=0}^m a_iv_i(x) - \sum_{i=0}^{m} a_iw_i(x)}{t(x)} \label{eq:h}\end{align}
 
 and obtains the vector of coefficients of $h(x)$ denoted by $\boldsymbol{h}$.
-Then, the proof $\pi$ for the statement $x \in L$ is $\pi := (g_1A =: \pi_A, g_2B =: \pi_B, g_1C =: \pi_C)$, where, given randomly sampled $r,s\in \mathbb{F}_q$,
+Then, the proof $\pi$ (or, more concretely, in our case $\pi_\text{ZKJoinSplit}$) for the statement $x \in L$ is $\pi := (g_1A =: \pi_A, g_2B =: \pi_B, g_1C =: \pi_C)$, where, given randomly sampled $r,s\in \mathbb{F}_q$,
 
 \begin{align}
         A &:= \alpha + \sum_{i=0}^m a_iu_i(\tau) + r\delta \label{eq:A} \\
@@ -321,7 +325,7 @@ Given the evaluations of $(g_1{u_i(\tau)})_{i=0}^m$, $(g_1{v_i(\tau)})_{i=0}^m$,
         &+ {(g_1\delta)}{(-rs)} \label{eq:gC} 
 \end{align}
 
-Finally, $\pi$ is verified by using a pairing, in Zcash the optimal ate pairing\cite{vercauteren:optimal-ate}, specifically.
+Finally, $\pi$ is verified by using a pairing with $G_1$ and $G_2$ as source groups, in Zcash the optimal ate pairing\cite{vercauteren:optimal-ate}, specifically.
 
 \section{Resending Shielded Transactions} \label{sec:resending}
 
@@ -338,40 +342,42 @@ This process can be repeated until the transaction is in the blockchain.
 
 We assume that the node is capable of sending and resending to a sufficient number of peers, such that failure of the network never prevents the transaction's inclusion.
 Hence, we will not deal with the first and the last step of Figure \ref{fig:resend-steps}.
-A node can assume that its transaction has been refused by waiting for the transaction's inclusion and then for its confirmation.
-If the node does not find its transaction in its local blockchain after some time, the transaction has been refused.
+A node can assume that its transaction has been rejected by waiting for the transaction's inclusion and then for its confirmation.
+If the node does not find its transaction in its local blockchain after some time, the transaction has been rejected.
 This can happen for insufficient transaction fees, for example.
-If it is included, but not fully confirmed by a sufficient number of blocks, it has been refused as well.
+If it is included, but not fully confirmed by a sufficient number of blocks, it has been rejected as well.
 This can happen for a chain reorganization.
-Once it is certain that a transaction has been refused, it must be checked what fields of the JoinSplit must change to maximize the chances of inclusion.
+Once it is certain that a transaction has been rejected, it must be checked what fields of the JoinSplit must change to maximize the chances of inclusion.
 All JoinSplit fields, which include public inputs to $\pi_\text{ZKJoinSplit}$, as well as all secret inputs are listed in two tables in Table \ref{fig:joinsplit} and \ref{fig:secretinputs}.
 
-Once it is clear what fields must change, the sender must recalculate them and all other wire values that are related in the circuit.
+Once it is clear what fields must change, the sender must recalculate them and all other related wire values in the circuit.
 Based on the new wire values, a new proof $\pi'_\text{ZKJoinSplit}$ is calculated.
 Let $I_\text{changed}$ be the set of indices of coefficients $a_i$ that may change.
 Denote the new coefficients by $a'_i$, where $a'_i \neq a_i \implies i \in I_\text{changed}$.
 We want to find relationships between the calculations made for $\pi_\text{ZKJoinSplit} := (\pi_A, \pi_B, \pi_C)$ and those made for $\pi'_\text{ZKJoinSplit} := (\pi_A', \pi_B', \pi_C')$ such that a maximal amount from the former can be reused for the latter.
 
-\subsection{Finding $I_\text{changed}$}
+\subsection{Finding $I_\text{changed}$} \label{sec:changed}
 
 The set $I_\text{changed}$ should be kept as small as possible; for the JoinSplit circuit, $l=9$ and $m=1956949$, so $I_\text{changed}$ should be a small percentage of $m$.
 As we will see in Section \ref{sec:opt}, this allows for the biggest gains in performance since much of the previous proof can be reused.
 Indeed, with reasonable assumptions, the two cases mentioned in the introduction allow $I_\text{changed}$ to be small.
 
-By far the biggest number of wires is involved in the repeated calculation of the SHA-256 compression function to verify the Merkle paths for the input notes as briefly described in Section \ref{sec:joinsplit}.
-Should any input change that this computation depends on such as $\text{path}_1,\text{path}_2$, then all involved wires need to be recalculated and $I_\text{changed}$ becomes huge.
+By far the biggest number of wires, about $80\%$ of the circuit, is involved in the verification of the Merkle paths for the input notes as briefly described in Section \ref{sec:joinsplit}:
+the hash function used for the Merkle tree is the SHA-256 compression function, which needs many wires.
+Should any input change that this computation depends on such as $\text{path}_1$ or $\text{path}_2$, then all involved wires need to be recalculated and $I_\text{changed}$ becomes huge.
 Otherwise, it will stay small.
 
 First, we consider the case of changing transaction fees sent to a transparent address.
 Anyone sending a transaction pays a small fee to miners in order to incentivize the transaction's inclusion in a block.
-Such fees are paid implicitly by keeping the transaction outputs too low: if the sum of input values to a transaction exceed the sum of output values, then the miner can take ownership of the difference.
+Such fees are paid implicitly by keeping the transaction outputs too low: if the sum of input values to a transaction exceeds the sum of output values, then the miner can take ownership of the difference.
 However, if the transaction fee is set too low, the miner might decide to give preference to other transactions with higher fees.
-Hence, the goal is to choose the minimal fee such that the transaction is included, but not too much money is spent on that either and if the transaction is found to be refused by the spender, it must be resent with a higher transaction fee.
+Hence, the goal is to choose the minimal fee such that the transaction is included, but not too much money is spent on that either.
+If the spender finds the transaction to be rejected, it must be resent with a higher transaction fee.
 
 Paying transaction fees from a JoinSplit description happens by setting $v_\text{pub}^\text{new}$ to some non-zero value.
 This amount is then available to the transparent outputs of the containing transaction.
 They can spend some of it and the remainder can later be claimed by the miner.
-This last step is out of the control of the JoinSplit description, however, so the fundamental mechanism is to set and change a transaction fee paid from a JoinSplit transaction is the adjustment of $v_\text{pub}^\text{new}$.
+This last step is out of the control of the JoinSplit description, however, so the fundamental mechanism to set and change a transaction fee paid from a JoinSplit transaction is the adjustment of $v_\text{pub}^\text{new}$.
 
 Changing $v_\text{pub}^\text{new}$ affects the balance equation (\ref{eq:balance}) in Section \ref{sec:joinsplit}, verified by $\pi_\text{ZKJoinSplit}$.
 Increasing $v_\text{pub}^\text{new}$ necessitates a decrease in either the left-hand side or $v_1^\text{new} + v_2^\text{new}$.
@@ -388,7 +394,20 @@ In total, this makes for a set $I_\text{changed}$ of size
 
 which is only $\approx 2.6\%$ of all wires.
 
-TODO: same for chain reorganization.
+The second scenario we would like to consider is a blockchain reorganization, frequently called a ``reorg''.
+Every node stores in reality not a chain but a tree, since for each height in the blockchain, mined blocks may be proposed by multiple nodes.
+The active blockchain is a path from the tree's root to one of its leaves and is the path with the largest accumulated difficulty: each block has an associated difficulty value indicating the effort a miner has to put into mining the block.
+It happens that a node receives a mined block that is at a lower height than the tip of its active blockchain.
+This new block now is a branch off the active blockchain.
+If this branch becomes active after some time because yet other blocks are added and it ends up having higher accumulated difficulty, a blockchain reorganization happens: all blocks that are in the old active chain but not in the new one become stale and its JoinSplits are invalidated.
+Because of that invalidation, a user might want to resend a JoinSplit.
+
+Whether $\pi_\text{ZKJoinSplit}$ needs to be recalculated or not depends on how $\text{rt}^\text{Sprout}$ was chosen.
+If $\text{rt}^\text{Sprout}$ refers to a commitment tree at some previous blockheight and it is before the branch, no change is needed since $\text{rt}^\text{Sprout}$ refers to a tree far enough in the past.
+If it is contained in the branch, $\text{rt}^\text{Sprout}$ changes and so do $\text{path}_1,\text{path}_2$, which requires recalculation of the path verification, dramatically increasing $|I_\text{changed}|$.
+Therefore, $\text{rt}^\text{Sprout}$ should always be chosen far enough in the past.
+If $\text{rt}^\text{Sprout}$ refers to a commitment tree at some other JoinSplit in the same transaction, $\text{rt}^\text{Sprout}$ of the first JoinSplit which actually refers to a past block must be checked as described above.
+In any case, either $\text{rt}^\text{Sprout}$ changes and the optimizations provide practically no advantage, or $\pi_\text{ZKJoinSplit}$ can be fully reused.
 
 \subsection{Optimizing The zk-SNARK's Recalculation} \label{sec:opt}
 
@@ -419,12 +438,13 @@ Define $\pi^-_A := g_1{\sum_{i \in I_\text{changed}}a_iu_i(\tau)}$.
 Then, for $\pi_A'$, this replacement is fulfilled by the calculation
 
 \begin{align*}
-        \pi_A - \pi^-_A + g_1{\sum_{i \in I_\text{changed}}a_i'u_i(\tau)} =: \pi_A' \\
+        \pi_A - \pi^-_A + g_1{\sum_{i \in I_\text{changed}}a_i'u_i(\tau)} =: \pi_A'
 \end{align*}
 
+as can be seen from the definition of $A$ in (\ref{eq:A}).
 We have created $\pi_A'$ by doing a multiexponentiation using the indices in $i \in I_\text{changed}$ instead of the full range of indices.
 If $I_\text{changed}$ is sufficiently small, this may lead to a performance boost.
-Defining terms like $\pi^-_A$, very similar calculations can be performed for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$, respectively.
+By defining ``subtraction terms'' like $\pi^-_A$ for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$, very similar calculations can be performed for these other values as well as can be seen from (\ref{eq:B}) and (\ref{eq:C}).
 
 However, by changing $\pi_A = g_1A$ and $g_1B$, we must recalculate ${(g_1A)}s + {(g_1B)}r$ in $\pi_C$.
 This requires knowledge of $r$ and $s$.
@@ -439,28 +459,30 @@ We did not find a relationship between a change in $a_i$ and the results of the 
 
 \subsection{Practicality Of The Optimizations} \label{sec:benchmarks}
 
-In order to understand the relative usefulness of speeding up each computation, proof creation of $\pi_\text{ZKJoinSplit}$ was benchmarked.
-The used system was TODO.
-Any parallelism was disabled for ease of benchmarking.  % TODO: justify even though some are better parallelizable
-The obtained measurements were the following (anything below $\SI{1}{\milli\second}$ is not considered):
+In order to understand the relative usefulness of speeding up each computation, proof creation of $\pi_\text{ZKJoinSplit}$ without our optimizations was benchmarked.
+The used system was a 11th Gen Intel(R) Core(TM) i7-1165G7 CPU at \SI{2.80}{\giga\hertz} with \SI{16}{\gibi\byte} of RAM.
+Most calculations are parallelized, and if they are, it was made sure that calculations do not overlap as they do, however, in the original implementation.
+The obtained measurements were the following:
 
 \begin{center}
 \begin{tabular}{ c|c }
-        Term & Sequential Time \\
+        Calculated Data & Time (in \SI{}{\milli\second}) \\
         \hline
-        $\boldsymbol{\sigma_{1,2}}\boldsymbol{h}$ in (\ref{eq:gC}) & \SI{33}{\second} \\
-        $\boldsymbol{\sigma_{1,1}}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}) & \SI{2}{\second} \\
-        $\sum_{i=0}^m(g_1u_i(\tau))a_i$ in (\ref{eq:gA}) & \SI{2}{\second} \\
-        $\sum_{i=0}^m(g_1v_i(\tau))a_i$ in (\ref{eq:g1B}) & \SI{1.4}{\second} \\
-        $\sum_{i=0}^m(g_2v_i(\tau))a_i$ in (\ref{eq:g2B}) & \SI{4.3}{\second}
+        Synthesis (finding all $a_i$) & 754 \\
+        $\boldsymbol{h}$ from $h$ in (\ref{eq:h}) & 3564 \\
+        $\boldsymbol{\sigma}_{1,2}\boldsymbol{h}$ in (\ref{eq:gC}) & 13795 \\
+        $\boldsymbol{\sigma}_{1,1}(a_i)_{i=l+1}^m$ in (\ref{eq:gC}) & 1398 \\
+        $\sum_{i=0}^m(g_1u_i(\tau))a_i$ in (\ref{eq:gA}) & 1396 \\
+        $\sum_{i=0}^m(g_1v_i(\tau))a_i$ in (\ref{eq:g1B}) & 576  \\
+        $\sum_{i=0}^m(g_2v_i(\tau))a_i$ in (\ref{eq:g2B}) & 1675
 \end{tabular}
 \end{center}
 
-The multiexponentiation $\boldsymbol{\sigma_{1,2}}\boldsymbol{h}$ takes by far the longest time.
-Unfortunately, as explained in Section \ref{sec:opt}, we have not found a viable optimization for that operation.
+The multiexponentiation $\boldsymbol{\sigma}_{1,2}\boldsymbol{h}$ and the calculation of $h$ take by far the longest time.
+Unfortunately, as explained in Section \ref{sec:opt}, we have not found a viable optimization for these operations.
 This severely limits the usefulness of our optimizations in the real world.
 
-The values needed to store after sending a transaction and before notification of full confirmation are $r,s \in \mathbb{F}_q$ and $\pi^-_A$, as well as the similar values for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$.
+The values needed to store after sending a transaction and before notification of full confirmation are $r,s$ and $\pi^-_A$, as well as the similar values for $\pi_B$, $g_1B$, and $\boldsymbol\sigma_{1,1}(a_i)_{i=l+1}^m$.
 Choosing the encoding of elements in $G_1$ and $G_2$ used for Zcash \cite{hopwood:zcash} any element in $G_1$ takes 48 bytes and any element in $G_2$ takes 96 bytes.
 $q \approx 2^{255}$, so 32 bytes suffice to represent any value in $\mathbb{F}_q$.
 
@@ -479,11 +501,14 @@ Furthermore, the optimizations are fully backwards-compatible such that any user
 
 Even though no measurements of the optimizations have been made, we believe that the improvements in time are minor, given that the most expensive
 computation has not been optimized.
-Additionally, creating new JoinSplit transactions is not supported anymore by current Zcash nodes (v5.5.1).
+Additionally, creating new JoinSplit transactions is not supported anymore by recent Zcash nodes (zcashd v5.5.1).
 
-\section{Outlook} \label{sec:future}
+\section{Future Work} \label{sec:future}
 
-There are potentially other optimizations that can be made when recalculating the proof.
+Most importantly, the theoretical optimizations have to be implemented.
+Then, a performance comparison between resending a transaction from scratch and using the optimizations is required, preferably for different real-world scenarios.
+
+More generally, there are potentially other optimizations that can be made when recalculating the proof.
 While this report only dealt with fully backward-compatible changes, perhaps there are optimizations that require changes of the CRS or the content of JoinSplit descriptions, which would break backward compatibility.
 Furthermore, more recent versions of Zcash support other transaction types such as Spend and Output since Sapling, which are still proved using Groth16 but come with their own circuits.
 $I_\text{changed}$ would need to be adjusted to these more recent circuits.
